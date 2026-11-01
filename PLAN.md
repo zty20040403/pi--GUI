@@ -1,7 +1,7 @@
 # pi desk 开发方案
 
 > 版本：2026-11-01 · 作者：Kenneth（需求）+ Claude（整理）
-> 执行者：pi（在 `~/Desktop/pi-desk` 里按本文一步一步做）
+> 执行者：pi（在 `~/Desktop/pi harness` 里按本文一步一步做；文件夹名带空格，命令里要加引号：`cd ~/Desktop/"pi harness"`）
 > 读者：Kenneth（要看得懂）、pi（要照着做得出来）
 
 ---
@@ -86,7 +86,7 @@ git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness.git refs/dee
 ### 2.2 目录结构
 
 ```
-pi-desk/
+pi harness/             ← 项目根目录（产品名仍叫 pi desk）
   PLAN.md               ← 本文
   AGENTS.md             ← 给 pi 的规矩
   package.json  tsconfig.json  vite.config.ts  index.html
@@ -260,6 +260,7 @@ ls "$P"   # 重点看 rpc.md、rpc-commands.md、json.md、rpc-extension-ui.md�
 - 已装插件的情况（Claude 已查过源码）：
   - **选择题**（`@juicesharp/rpiv-ask-user-question`）：在 RPC 模式下自动改用 `select` / `input`，一题一个弹窗。可以优化：看到 `ask_user_question` 工具开始执行时，把它的题目和选项提前显示成聊天里的卡片。
   - **计划模式**（`@narumitw/pi-plan-mode`）：文档写明支持 RPC，用 `select` 和 `editor`。另外它的 `Plan Mode Complete` 工具调用里带着完整计划，在聊天里用 Markdown 卡片显示出来。
+  - **目标模式**（`pi-goal-x`）：命令 `/goal`、`/goal-direct`、`/goal-status`、`/goal-pause`、`/goal-resume` 等，目标记录在项目的 `.pi/goals/`。它的进度面板是为终端写的，先查它在 RPC 下发了哪些 `setWidget` / `notify` / `setStatus`（源码在 `~/.pi/agent/npm/node_modules/pi-goal-x/extensions/`），能显示的照显示；不够的话，读 `.pi/goals/` 里的 Markdown 文件自己画一个目标进度面板。顶部栏加"暂停目标"按钮（发 `/goal-pause`）。
   - **任务清单**（`@juicesharp/rpiv-todo`）：它的清单面板只在终端里显示。pi desk 要**自己画**：监听名为 `todo` 的工具调用（参数形如 `{"action":"update","id":2,"status":"in_progress","activeForm":"..."}`，完整格式去读 `~/.pi/agent/npm/node_modules/@juicesharp/rpiv-todo/` 的源码），在输入框上方显示一个可折叠的清单，做完的打勾。
 
 ### 3.7 安全
@@ -276,7 +277,7 @@ ls "$P"   # 重点看 rpc.md、rpc-commands.md、json.md、rpc-extension-ui.md�
 ### 第 1 阶段：后台能遥控 pi（不做界面）
 
 1. `server/auth.ts`：生成口令；`checkHttp(req)` 校验 Host 和 Bearer；`checkWs(req)` 校验 Host、Origin（开发时允许 `http://127.0.0.1:5173`）和 `token` 参数。
-2. `server/pi-pool.ts`：`Map<cwd, PiProcess>`。`get(cwd)` 没有就启动（加参数 `-e <pi-desk>/pi-extension/desk-permissions.ts`，权限插件在第 5 阶段才写，先留开关，文件不存在就不加）。进程退出时从 Map 删除并通知前端。空闲 30 分钟自动关闭。
+2. `server/pi-pool.ts`：`Map<cwd, PiProcess>`。`get(cwd)` 没有就启动（加参数 `-e <项目根目录>/pi-extension/desk-permissions.ts`，路径带空格，用 `spawn` 的参数数组传，不要拼字符串，权限插件在第 5 阶段才写，先留开关，文件不存在就不加）。进程退出时从 Map 删除并通知前端。空闲 30 分钟自动关闭。
 3. `server/index.ts`：
    - HTTP：`GET /api/projects`（调 `listProjects()`）、`GET /api/health`。生产模式下提供 `dist/` 静态文件，找不到的路径返回 `index.html`。
    - WebSocket `/ws`：客户端发 `{op:"open",cwd,sessionPath?}` → 后台确保进程存在，有 `sessionPath` 就 `switch_session`，否则 `new_session`；然后依次取 `get_state`、`get_messages`、`get_session_stats`、`get_available_models`、`get_commands`，回 `{op:"opened",cwd,...}`。
@@ -437,7 +438,7 @@ pi 本身没有权限模式。这个插件用 pi 的 `tool_call` 钩子在**每�
 
 ### 6.1 开发
 ```bash
-cd ~/Desktop/pi-desk
+cd ~/Desktop/"pi harness"
 npm run dev        # 后台 4317 + 页面 5173，看终端打印的带口令网址
 ```
 
