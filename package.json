@@ -8,7 +8,10 @@
     "dev": "concurrently -k -n server,web -c blue,green \"tsx watch server/index.ts\" \"vite\"",
     "build": "vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test --test-concurrency=1 scripts/backend.test.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "verify:phase1": "tsx scripts/verify-phase1.ts"
   },
   "dependencies": {
     "mermaid": "11.4.1",

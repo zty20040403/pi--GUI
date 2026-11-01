@@ -287,11 +287,13 @@ ls "$P"   # 重点看 rpc.md、rpc-commands.md、json.md、rpc-extension-ui.md�
 4. 写一个命令行测试脚本 `scripts/smoke.ts`：连 WebSocket，`open` 一个临时文件夹，切到 `cliproxy/gpt-6-luna` + `low`，发"只回复 ok"，等 `agent_settled`，打印拼出来的回复和花费，然后退出。
 
 **验收**
-- [ ] `npm run typecheck` 没有错误。
-- [ ] `npx tsx server/index.ts` 能启动，打印带口令的网址。
-- [ ] `npx tsx scripts/smoke.ts` 输出 `ok` 和花费。
-- [ ] 不带口令访问 `/api/projects` 返回 401。
-- [ ] `/api/projects` 返回的对话列表和 `~/.pi/agent/sessions` 里的对得上。
+- [x] `npm run typecheck` 没有错误。
+- [x] `npx tsx server/index.ts` 能启动，打印带口令的网址。
+- [x] `npx tsx scripts/smoke.ts` 输出 `ok` 和花费。
+- [x] 不带口令访问 `/api/projects` 返回 401。
+- [x] `/api/projects` 返回的对话列表和 `~/.pi/agent/sessions` 里的对得上。
+
+实际验收记录及复跑方式见 [`docs/phase-1-verification.md`](docs/phase-1-verification.md)。
 
 ### 第 2 阶段：能聊天的界面
 
