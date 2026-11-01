@@ -12,15 +12,27 @@ export function Composer() {
   const [hideCommands, setHideCommands] = useState(false);
   const lastSubmitted = useRef("");
   const input = useRef<HTMLTextAreaElement>(null);
+  const draftSession = useRef(state.session.sessionId);
+  const draftText = useRef(draft); draftText.current = draft;
+  const drafts = useRef(new Map<string, string>());
+  useEffect(() => {
+    const old = draftSession.current;
+    if (old === state.session.sessionId) return;
+    draftSession.current = state.session.sessionId;
+    if (old) { drafts.current.set(old, draftText.current); setDraft(drafts.current.get(state.session.sessionId ?? "") ?? ""); }
+    setError(""); lastSubmitted.current = ""; setHideCommands(false);
+  }, [state.session.sessionId]);
   const available = [...state.commands, ...(state.commands.some((command) => command.name === "compact") ? [] : [{ name: "compact", description: "手动压缩当前上下文", source: "client" }])];
   const commands = !hideCommands && /^\/[^\s]*$/.test(draft) ? available.filter((command) => command.name.toLowerCase().includes(draft.slice(1).toLowerCase())).slice(0, 12) : [];
   const ready = state.connection === "ready";
   async function submit(behavior?: "steer" | "followUp", text = draft) {
     if (!text.trim() || sending || !ready) return;
     setSending(true); setError(""); lastSubmitted.current = text;
+    const origin = draftSession.current;
     try {
       await send(text, behavior);
-      setDraft((current) => current === text ? "" : current);
+      if (origin) drafts.current.delete(origin);
+      if (draftSession.current === origin) setDraft((current) => current === text ? "" : current);
       setHideCommands(false);
     } catch (error) { setError((error as Error).message); }
     finally { setSending(false); input.current?.focus(); }
@@ -36,7 +48,7 @@ export function Composer() {
   }
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented && !event.isComposing && (state.busy || state.compacting)) {
+      if (event.key === "Escape" && !event.defaultPrevented && !event.isComposing && !document.querySelector("dialog[open]") && (state.busy || state.compacting)) {
         event.preventDefault(); void abort();
       }
     };

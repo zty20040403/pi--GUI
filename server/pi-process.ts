@@ -19,6 +19,7 @@ export class PiProcess extends EventEmitter {
   private writes: Promise<void> = Promise.resolve();
   private disposal?: Promise<void>;
   exited = false;
+  sessionFile?: string;
 
   constructor(readonly cwd: string, options: PiProcessOptions = {}) {
     super();
@@ -72,6 +73,11 @@ export class PiProcess extends EventEmitter {
         continue;
       }
       (record as RpcRecord & { [RPC_SEQUENCE]?: number })[RPC_SEQUENCE] = ++this.sequence;
+      if (record.type === "response" && record.success === true) {
+        const data = record.data as Record<string, unknown> | undefined;
+        if (record.command === "get_state") this.sessionFile = typeof data?.sessionFile === "string" ? data.sessionFile : undefined;
+        if (["new_session", "switch_session"].includes(String(record.command)) && data?.cancelled !== true) this.sessionFile = undefined;
+      }
       this.emit("activity");
       const waiter = record.type === "response" && record.id ? this.pending.get(record.id) : undefined;
       if (waiter) {

@@ -1,4 +1,5 @@
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { lstat, open, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { HttpError } from "./http.js";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 
@@ -82,18 +83,37 @@ export async function listProjects(sessionsDir = SESSIONS_DIR): Promise<Project[
     .sort((a, b) => (b.sessions[0]?.mtime ?? 0) - (a.sessions[0]?.mtime ?? 0));
 }
 
-// 只能打开 pi 的对话文件，且它必须属于这个项目，不能拿任意路径当对话读取。
+// 删除旧项目的对话不要求项目目录仍存在；只信任 sessions 内的普通 JSONL 文件。
+export async function savedSession(sessionPath: unknown, sessionsDir = SESSIONS_DIR): Promise<{ path: string; cwd: string; id: string }> {
+  if (typeof sessionPath !== "string" || !isAbsolute(sessionPath) || sessionPath.includes("\0")) throw new HttpError(400, "对话路径必须是绝对路径");
+  try {
+    const root = await realpath(sessionsDir);
+    const path = await realpath(sessionPath);
+    const rel = relative(root, path);
+    if (!rel || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) || !path.endsWith(".jsonl")) throw new HttpError(403, "只能打开 pi 保存的对话");
+    const info = await lstat(sessionPath);
+    if (!info.isFile() || info.isSymbolicLink()) throw new HttpError(403, "只能操作普通对话文件，不允许软链接");
+    const file = await open(path, "r");
+    let header;
+    try {
+      const buffer = Buffer.alloc(64 * 1024);
+      const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+      header = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8").split("\n", 1)[0]);
+    } finally { await file.close(); }
+    if (header.type !== "session" || typeof header.cwd !== "string" || typeof header.id !== "string") throw new HttpError(400, "这不是有效的 pi 对话");
+    return { path, cwd: header.cwd, id: header.id };
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new HttpError(404, "对话文件不存在，可能已被移走");
+    throw new HttpError(400, "无法读取有效的 pi 对话");
+  }
+}
+
+export function invalidateSession(path: string) { cache.delete(path); }
+
+// 打开时还要确认属于此项目；不把其他文件当对话读。
 export async function checkSessionPath(cwd: string, sessionPath: string, sessionsDir = SESSIONS_DIR): Promise<string> {
-  if (!isAbsolute(sessionPath)) throw new Error("对话路径必须是绝对路径");
-  const root = await realpath(sessionsDir);
-  const path = await realpath(sessionPath);
-  const rel = relative(root, path);
-  if (!rel || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) || !path.endsWith(".jsonl")) {
-    throw new Error("只能打开 pi 保存的对话");
-  }
-  const header = JSON.parse((await readFile(path, "utf8")).split("\n", 1)[0]);
-  if (header.type !== "session" || typeof header.cwd !== "string" || await realpath(header.cwd) !== cwd) {
-    throw new Error("这个对话不属于所选项目");
-  }
-  return path;
+  const session = await savedSession(sessionPath, sessionsDir);
+  if (await realpath(session.cwd) !== cwd) throw new HttpError(400, "这个对话不属于所选项目");
+  return session.path;
 }

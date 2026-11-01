@@ -59,6 +59,7 @@ async function mockBrowserTests(browser: Browser) {
   const state = () => ({ model, thinkingLevel: "low", sessionId: "fixture-session", sessionFile: "/fixture-session.jsonl", isStreaming: busy });
   const result = (reqId: string, data: any) => route.send(JSON.stringify({ op: "rpc_result", reqId, response: { success: true, data } }));
   await page.route("**/api/workspace", (route) => route.fulfill({ json: { cwd: "/fixture" } }));
+  await page.route("**/api/projects", (route) => route.fulfill({ json: { projects: [], activity: [] } }));
   await page.routeWebSocket(/\/ws\?/, (ws) => {
     route = ws;
     ws.onMessage((raw) => {

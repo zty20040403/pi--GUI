@@ -15,8 +15,13 @@ export function savedTarget(storage: Storage): Target | undefined {
       ? { cwd: target.cwd, sessionPath: typeof target.sessionPath === "string" ? target.sessionPath : undefined } : undefined;
   } catch { return undefined; }
 }
-export async function http<T>(path: string, token: string): Promise<T> {
-  const response = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) throw new Error(response.status === 401 ? "口令失效，请用后台本次打印的网址重新打开" : `请求失败（${response.status}）`);
+export async function http<T>(path: string, token: string, body?: unknown): Promise<T> {
+  const response = await fetch(path, { headers: { Authorization: `Bearer ${token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+    ...(body !== undefined ? { method: "POST", body: JSON.stringify(body) } : {}) });
+  if (!response.ok) {
+    let detail: string | undefined;
+    try { detail = (await response.json()).error; } catch {}
+    throw new Error(response.status === 401 ? "口令失效，请用后台本次打印的网址重新打开" : detail ?? `请求失败（${response.status}）`);
+  }
   return response.json();
 }

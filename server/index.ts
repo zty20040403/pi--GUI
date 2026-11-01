@@ -1,4 +1,7 @@
+import { execFile } from "node:child_process";
 import { createReadStream } from "node:fs";
+import { homedir } from "node:os";
+import { promisify } from "node:util";
 import { realpath, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
@@ -7,7 +10,9 @@ import { WebSocket, WebSocketServer } from "ws";
 import { BASE_URL, DeskAuth, HOST, PORT } from "./auth.js";
 import { PiPool } from "./pi-pool.js";
 import { sequenceOf, type RpcRecord } from "./pi-process.js";
-import { checkSessionPath, listProjects } from "./sessions.js";
+import { checkSessionPath, invalidateSession, listProjects, savedSession, SESSIONS_DIR } from "./sessions.js";
+import { checkDirectory } from "./directories.js";
+import { HttpError, readJson } from "./http.js";
 import { logText, publicData } from "./privacy.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -26,7 +31,7 @@ function dataOf(response: RpcRecord): ObjectRecord {
   return isObject(response.data) ? response.data : {};
 }
 
-export type ServerOptions = { pool?: PiPool; development?: boolean; distDir?: string };
+export type ServerOptions = { pool?: PiPool; development?: boolean; distDir?: string; sessionsDir?: string; trash?: (path: string) => Promise<void> };
 
 export function createDeskServer(options: ServerOptions = {}) {
   const development = options.development ?? process.env.NODE_ENV !== "production";
@@ -35,6 +40,9 @@ export function createDeskServer(options: ServerOptions = {}) {
   const distDir = options.distDir ?? resolve(ROOT, "dist");
   const wsServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
   const opening = new Map<string, Promise<void>>();
+  const deleting = new Set<string>();
+  const sessionsDir = options.sessionsDir ?? SESSIONS_DIR;
+  const trash = options.trash ?? (async (path: string) => { await promisify(execFile)("trash", [path]); });
 
   function json(res: ServerResponse, status: number, body: unknown) {
     res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -77,10 +85,27 @@ export function createDeskServer(options: ServerOptions = {}) {
     const url = new URL(req.url ?? "/", BASE_URL);
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       if (!auth.checkHttp(req)) return json(res, 401, { error: "未授权" });
+      if (req.method === "POST" && url.pathname === "/api/check-dir") {
+        const body = await readJson(req);
+        return json(res, 200, { cwd: await checkDirectory(body.path) });
+      }
+      if (req.method === "POST" && url.pathname === "/api/sessions/delete") {
+        const body = await readJson(req);
+        const session = await savedSession(body.path, sessionsDir);
+        if (deleting.has(session.path)) throw new HttpError(409, "这个对话正在移到废纸篓，请稍候");
+        deleting.add(session.path);
+        try {
+          await pool.closeSession(session.path);
+          try { await trash(session.path); } catch { throw new HttpError(500, "移到废纸篓失败，请确认 macOS trash 可用；没有永久删除文件"); }
+          invalidateSession(session.path);
+          broadcast({ op: "session_deleted", cwd: session.cwd, sessionPath: session.path });
+          return json(res, 200, { ok: true });
+        } finally { deleting.delete(session.path); }
+      }
       if (req.method !== "GET") return json(res, 405, { error: "不支持这个方法" });
-      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 2, processes: pool.size });
-      if (url.pathname === "/api/projects") return json(res, 200, { projects: await listProjects() });
-      if (url.pathname === "/api/workspace") return json(res, 200, { cwd: ROOT });
+      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 3, processes: pool.size });
+      if (url.pathname === "/api/projects") return json(res, 200, { projects: await listProjects(sessionsDir), activity: pool.activity });
+      if (url.pathname === "/api/workspace") return json(res, 200, { cwd: ROOT, home: homedir() });
       return json(res, 404, { error: "接口不存在" });
     }
     if (!development) return serveStatic(req, res, url);
@@ -90,8 +115,8 @@ export function createDeskServer(options: ServerOptions = {}) {
   }
 
   const server = createServer((req, res) => {
-    void handleHttp(req, res).catch(() => {
-      if (!res.headersSent) json(res, 500, { error: "请求处理失败" });
+    void handleHttp(req, res).catch((error: Error) => {
+      if (!res.headersSent) json(res, error instanceof HttpError ? error.status : 500, { error: error instanceof HttpError ? error.message : "请求处理失败" });
       else res.destroy();
     });
   });
@@ -113,7 +138,7 @@ export function createDeskServer(options: ServerOptions = {}) {
     for (const ws of wsServer.clients) send(ws, value);
   }
   const diagnostics = new Map<string, string>();
-  pool.on("record", (cwd: string, record: RpcRecord, seq: number) => broadcast({ op: "event", cwd, record, seq }));
+  pool.on("record", (cwd: string, record: RpcRecord, seq: number, sessionPath?: string) => broadcast({ op: "event", cwd, record, seq, sessionPath }));
   pool.on("exit", (cwd: string, reason: string) => {
     const tail = diagnostics.get(cwd);
     if (tail) process.stderr.write(`[pi] ${logText(tail)}\n`);
@@ -151,7 +176,8 @@ export function createDeskServer(options: ServerOptions = {}) {
       const cmd = message.cmd as ObjectRecord;
       if (cmd.type === "switch_session") {
         if (typeof cmd.sessionPath !== "string") throw new Error("缺少对话路径");
-        cmd.sessionPath = await checkSessionPath(cwd, cmd.sessionPath);
+        cmd.sessionPath = await checkSessionPath(cwd, cmd.sessionPath, sessionsDir);
+        if (deleting.has(cmd.sessionPath as string)) throw new HttpError(409, "对话正在移到废纸篓");
       }
       const response = await pi.request(cmd);
       send(ws, { op: "rpc_result", reqId: message.reqId, response });
@@ -159,12 +185,14 @@ export function createDeskServer(options: ServerOptions = {}) {
     }
     // 同一个项目的两个 open 串行，避免混合出两个对话的状态/历史。
     const operation = (opening.get(cwd) ?? Promise.resolve()).catch(() => {}).then(async () => {
-      const current = typeof message.sessionPath === "string" ? dataOf(await pi.request({ type: "get_state" })) : undefined;
-      // 刷新/重连同一活动对话时不 switch_session，否则会中断正在生成的回复。
-      if (!current || current.sessionFile !== message.sessionPath) {
+      const current = dataOf(await pi.request({ type: "get_state" }));
+      // 刷新/重连同一活动对话时不 switch；同一项目仍在回复时不许切走。
+      if (typeof message.sessionPath !== "string" || current.sessionFile !== message.sessionPath) {
+        if (current.isStreaming || current.isCompacting) throw new HttpError(409, "这个项目的对话还在回复，请先停止或等待完成");
         const cmd = typeof message.sessionPath === "string"
-          ? { type: "switch_session", sessionPath: await checkSessionPath(cwd, message.sessionPath) }
+          ? { type: "switch_session", sessionPath: await checkSessionPath(cwd, message.sessionPath, sessionsDir) }
           : { type: "new_session" };
+        if ("sessionPath" in cmd && deleting.has(cmd.sessionPath as string)) throw new HttpError(409, "对话正在移到废纸篓");
         if (dataOf(await pi.request(cmd)).cancelled === true) throw new Error("插件取消了打开对话");
       }
       const state = dataOf(await pi.request({ type: "get_state" }));

@@ -3,6 +3,7 @@ import { realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PiProcess, sequenceOf, type RpcRecord } from "./pi-process.js";
+import { HttpError } from "./http.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export type PoolOptions = {
@@ -34,6 +35,10 @@ export class PiPool extends EventEmitter {
     return this.processes.size;
   }
 
+  get activity() {
+    return [...this.processes.values()].map(({ pi, busy }) => ({ cwd: pi.cwd, sessionPath: pi.sessionFile, busy }));
+  }
+
   async get(cwd: string): Promise<PiProcess> {
     if (!isAbsolute(cwd)) throw new Error("项目路径必须是绝对路径");
     const canonical = await realpath(cwd);
@@ -61,7 +66,7 @@ export class PiPool extends EventEmitter {
     pi.on("record", (record: RpcRecord) => {
       if (record.type === "agent_start") entry.busy = true;
       if (record.type === "agent_settled") entry.busy = false;
-      this.emit("record", canonical, record, sequenceOf(record));
+      this.emit("record", canonical, record, sequenceOf(record), pi.sessionFile);
     });
     pi.on("stderr", (chunk: string) => this.emit("stderr", canonical, chunk));
     pi.once("exit", (reason: string) => {
@@ -76,6 +81,19 @@ export class PiPool extends EventEmitter {
       if (!entry.busy && entry.pi.pendingCount === 0 && this.now() - entry.lastActivity >= this.idleTimeoutMs) {
         void entry.pi.dispose().catch(() => this.emit("stderr", entry.pi.cwd, "无法关闭空闲 pi 进程\n"));
       }
+    }
+  }
+
+  async closeSession(sessionPath: string): Promise<void> {
+    for (const entry of [...this.processes.values()]) {
+      const pi = entry.pi;
+      if (pi.exited) continue;
+      const response = await pi.request({ type: "get_state" });
+      if (response.success !== true) throw new HttpError(409, "无法确认活动对话，请稍后重试");
+      const state = response.data as Record<string, unknown>;
+      if (state.sessionFile !== sessionPath) continue;
+      if (entry.busy || state.isStreaming || state.isCompacting || pi.pendingCount > 0) throw new HttpError(409, "对话还在回复或处理命令，请先停止或等待完成");
+      await pi.dispose();
     }
   }
 

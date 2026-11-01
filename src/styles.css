@@ -112,6 +112,55 @@ textarea::placeholder { color:var(--muted); }
 .statusbar { display:flex; gap:18px; align-items:center; padding:9px 24px; border-top:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:10px; white-space:nowrap; }
 .plugin-statuses { display:flex; gap:12px; min-width:0; overflow:hidden; text-overflow:ellipsis; margin-left:auto; }
 .access-screen { max-width:650px; margin:20vh auto; text-align:center; padding:20px; line-height:1.9; }
+.desk-layout { height:100dvh; display:flex; overflow:hidden; }
+.desk-layout>.app-shell { flex:1; min-width:0; }
+.session-sidebar { width:var(--sidebar-width,280px); flex-shrink:0; background:var(--panel); display:flex; flex-direction:column; border-right:1px solid var(--line); }
+.session-sidebar[hidden] { display:none; }
+.sidebar-heading { display:flex; justify-content:space-between; align-items:center; padding:20px 16px 12px; }
+.sidebar-actions { display:flex; gap:7px; padding:0 12px 12px; }
+.sidebar-actions button { flex:1; font-size:11px; padding:8px 6px; }
+.session-search { margin:0 12px 12px; width:calc(100% - 24px); font-size:12px; }
+.sidebar-list { overflow-y:auto; flex:1; padding:0 8px 70px; }
+.sidebar-empty { color:var(--muted); padding:8px 12px; font-size:11px; line-height:1.7; }
+.project-group { margin-bottom:13px; }
+.project-heading { display:flex; align-items:center; gap:5px; padding:7px 4px; }
+.project-toggle { display:flex; gap:8px; align-items:center; flex:1; min-width:0; text-align:left; border:0; background:transparent; padding:3px; font-size:12px; }
+.project-toggle strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:550; }
+.project-toggle:disabled { opacity:1; }
+.saved-count { color:var(--muted); font-size:9px; padding:0 10px 5px; }
+.session-row { display:flex; align-items:center; border-radius:7px; position:relative; margin-bottom:3px; }
+.session-row:hover,.session-row.selected { background:var(--soft); }
+.session-open { display:flex; align-items:center; gap:7px; flex:1; min-width:0; text-align:left; padding:10px; border:0; background:transparent; font-size:12px; }
+.session-name { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.session-open small { color:var(--muted); white-space:nowrap; font-size:9px; }
+.session-menu { position:relative; margin-right:5px; }
+.session-menu summary { list-style:none; color:var(--muted); padding:3px 6px; font-size:17px; }
+.session-menu summary::-webkit-details-marker { display:none; }
+.session-menu>div { position:absolute; right:0; top:28px; z-index:3; width:96px; background:var(--panel); border:1px solid var(--line); border-radius:7px; box-shadow:0 3px 12px #0002; padding:4px; }
+.session-menu button { display:block; width:100%; text-align:left; border:0; padding:8px; font-size:12px; }
+.danger-link { color:var(--error); }
+.home-hint { color:var(--muted); font-size:9px; line-height:1.6; margin:0 10px 7px; }
+.sidebar-footer { font-size:10px; color:var(--muted); padding:11px 16px; border-top:1px solid var(--line); }
+.sidebar-error { font-size:11px; color:var(--error); background:var(--error-bg); margin:0 10px 10px; padding:8px; border-radius:6px; }
+.sidebar-resizer { width:4px; flex-shrink:0; cursor:col-resize; touch-action:none; }
+.sidebar-resizer:hover,.sidebar-resizer:focus { background:var(--accent); outline:0; }
+.sidebar-backdrop,.sidebar-mobile-close { display:none; }
+.conversation-name { display:block; text-align:left; border:0; background:transparent; padding:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; font-weight:500; }
+.conversation-name:disabled { opacity:1; }
+.workspace-path { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--muted); margin-left:10px; }
+.session-dialog { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:14px; padding:24px; width:min(480px,calc(100vw - 32px)); max-height:85vh; box-shadow:0 15px 80px #0003; }
+.session-dialog::backdrop { background:#0005; }
+.session-dialog h2 { font-size:19px; margin:0 0 17px; }
+.session-dialog p { line-height:1.8; font-size:12px; }
+.session-dialog label { display:flex; flex-direction:column; gap:10px; font-size:12px; }
+.session-dialog input { width:100%; }
+.dialog-actions { display:flex; gap:9px; justify-content:flex-end; margin-top:22px; }
+.danger-button { background:var(--error); border-color:var(--error); color:var(--panel); }
+.danger-button:hover:not(:disabled) { background:var(--error); filter:brightness(1.1); }
+.recent-projects { margin-top:17px; max-height:220px; overflow:auto; }
+.recent-projects h3 { font-size:11px; color:var(--muted); font-weight:500; }
+.recent-projects button { display:block; width:100%; text-align:left; font-size:11px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; border:0; padding:7px; }
+@media (max-width:900px) { .session-sidebar { position:fixed; left:0; top:0; bottom:0; z-index:7; width:min(var(--sidebar-width,280px),85vw); box-shadow:5px 0 25px #0002; } .sidebar-backdrop { display:block; position:fixed; inset:0; border:0; border-radius:0; padding:0; z-index:6; background:#0003; } .sidebar-resizer { display:none; } .sidebar-mobile-close { display:inline-block; } }
 @keyframes spin { to { transform:rotate(360deg); } }
 @keyframes pulse { 50% { opacity:.3; } }
 @media (prefers-color-scheme:dark) { :root { --bg:#191b19; --panel:#202320; --text:#e7e8e2; --muted:#969c93; --line:#353a34; --soft:#2b302a; --accent:#80b18e; --error:#ec9991; --error-bg:#352622; --code:#191e19; } .send-button { color:#19241b; } }

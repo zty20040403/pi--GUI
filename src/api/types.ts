@@ -32,5 +32,9 @@ export type Command = { name: string; description?: string; source?: string };
 export type Opened = {
   op: "opened"; cwd: string; state: SessionState; messages: Message[]; stats: Stats; models: Model[]; commands: Command[]; seq?: number;
 };
+export type SessionSummary = { path: string; id: string; cwd: string; title: string; name?: string; mtime: number; virtual?: boolean };
+export type Project = { cwd: string; sessions: SessionSummary[] };
+export type Activity = { cwd: string; sessionPath?: string; busy: boolean };
+export type RecentProject = { cwd: string; openedAt: number };
 export type Target = { cwd: string; sessionPath?: string };
 export type Connection = "connecting" | "opening" | "ready" | "reconnecting" | "offline";

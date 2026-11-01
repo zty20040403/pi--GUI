@@ -1,7 +1,8 @@
 import type { Connection, Opened, Target, WireRecord } from "./types";
 
 type ClientEvent = { kind: "connection"; value: Connection } | { kind: "opened"; value: Opened }
-  | { kind: "event"; cwd: string; value: WireRecord } | { kind: "error"; value: string };
+  | { kind: "event"; cwd: string; value: WireRecord; sessionPath?: string }
+  | { kind: "deleted"; cwd: string; sessionPath: string; selected: boolean } | { kind: "error"; value: string };
 type Pending = { resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 export class RpcClient {
   private socket?: WebSocket;
@@ -15,12 +16,13 @@ export class RpcClient {
   private lastOpened?: Target;
   private opening?: Pending;
   private buffering = false;
-  private buffered: { cwd: string; record: WireRecord; seq: number }[] = [];
+  private buffered: { cwd: string; record: WireRecord; seq: number; sessionPath?: string }[] = [];
 
   constructor(private readonly token: string, private readonly endpoint: string,
     private readonly makeSocket = (url: string) => new WebSocket(url), private readonly reconnectMs = 500) {}
 
   get selectedCwd() { return this.target?.cwd; }
+  get selectedSessionPath() { return this.target?.sessionPath; }
   subscribe(listener: (event: ClientEvent) => void) {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
@@ -60,7 +62,7 @@ export class RpcClient {
           if (record.message) active = `${record.message.role}:${record.message.timestamp}:${record.message.toolCallId ?? ""}`;
           // 快照之前、且已在历史中的消息不重放，避免把相同 delta 拼两遍。
           const pastMessage = record.type.startsWith("message_") && represented.has(active) && item.seq <= (message.seq ?? 0);
-          if (!pastMessage) this.emit({ kind: "event", cwd: item.cwd, value: record });
+          if (!pastMessage) this.emit({ kind: "event", cwd: item.cwd, value: record, sessionPath: item.sessionPath });
         }
         this.buffered = [];
         this.emit({ kind: "connection", value: "ready" });
@@ -74,17 +76,27 @@ export class RpcClient {
       } else if (message.op === "event") {
         const dialog = message.record?.type === "extension_ui_request" && ["select", "confirm", "input", "editor"].includes(message.record.method);
         // open 自身也可能等待插件提问；对话交互不能等 opened 后再交给界面。
-        if (this.buffering && !dialog) this.buffered.push({ cwd: message.cwd, record: message.record, seq: message.seq ?? 0 });
-        else this.emit({ kind: "event", cwd: message.cwd, value: message.record });
+        if (this.buffering && message.cwd === this.target?.cwd && !dialog) this.buffered.push({ cwd: message.cwd, record: message.record, seq: message.seq ?? 0, sessionPath: message.sessionPath });
+        else this.emit({ kind: "event", cwd: message.cwd, value: message.record, sessionPath: message.sessionPath });
+      } else if (message.op === "session_deleted") {
+        const selected = this.target?.sessionPath === message.sessionPath;
+        if (selected) {
+          this.target = { cwd: this.target!.cwd };
+          this.lastOpened = this.target;
+        }
+        this.emit({ kind: "deleted", cwd: message.cwd, sessionPath: message.sessionPath, selected });
       } else if (message.op === "error") {
         this.buffering = false; this.buffered = [];
         this.resolveOpen(undefined, new Error(message.message));
         if (this.lastOpened) this.target = this.lastOpened;
         this.emit({ kind: "connection", value: this.lastOpened ? "ready" : "offline" });
         this.emit({ kind: "error", value: message.message });
-      } else if (message.op === "exit" && message.cwd === this.target?.cwd) {
-        this.emit({ kind: "error", value: `pi 进程已退出：${message.reason}。点击重新连接以恢复对话。` });
-        this.emit({ kind: "connection", value: "offline" });
+      } else if (message.op === "exit") {
+        this.emit({ kind: "event", cwd: message.cwd, value: { type: "desk_process_exit" } });
+        if (message.cwd === this.target?.cwd) {
+          this.emit({ kind: "error", value: `pi 进程已退出：${message.reason}。点击重新连接以恢复对话。` });
+          this.emit({ kind: "connection", value: "offline" });
+        }
       }
     };
     socket.onerror = () => {}; // close 统一处理，绝不打印带口令的连接地址。

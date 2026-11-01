@@ -2,7 +2,7 @@
 
 Kenneth 的 pi 图形客户端，底层遥控本机现有的 pi。完整方案见 [`PLAN.md`](PLAN.md)，开发规矩见 [`AGENTS.md`](AGENTS.md)。
 
-**当前进度：第 2 阶段，已经能在浏览器里聊天。还没有左边对话列表、右边文件面板或 Mac 应用。**
+**当前进度：第 3 阶段，已经能聊天并在左侧管理项目和对话。右侧文件面板和 Mac 应用还没做。**
 
 ## 怎么打开试
 
@@ -22,13 +22,22 @@ npm run dev
 4. AI 的回复会流式出现；工具卡片默认折叠，点一下能展开命令和输出。
 5. 用完后在启动后台的终端按 `Ctrl+C`，它会关闭自己启动的 pi 子进程。
 
-默认项目是这个仓库的文件夹。要聊别的项目，点顶部“项目路径”，填写已存在文件夹的绝对路径，点“在此项目开始新对话”。“新对话”则在当前项目开始一段新的对话。完整项目/对话列表在第 3 阶段做。
+默认项目是这个仓库的文件夹。左边按项目列出和终端共用的对话：
+
+- **打开文件夹**：填已存在文件夹的绝对路径（也支持 `~/`），或点“最近用过”填入路径，再点“打开”。
+- **新对话**：在当前项目开始新的对话；项目名旁的 `＋` 则在那个项目新建。
+- **打开旧对话**：直接点对话，自动切换到它所属的项目和历史。换标签页后也可以从左边找回来。
+- **改名/删除**：点对话旁 `⋯`。改名会同步到终端；删除要确认，使用 macOS 废纸篓，不永久删除。顶部对话标题也能点击改名。
+- **收起/调整宽度**：顶部 `☰` 收起列表；拖动列表右边界调整宽度。窄窗口可用列表里的 `×` 收起。
+
+正在回复的对话会转圈。同一个项目正在回复时不能切到它的另一段对话或新建；可以切到另一个项目，原项目继续回复。删除正在回复的对话需要先停止。
 
 **操作审批还没做。** 现在 pi 可以直接读写文件和执行命令，请只在可信项目里使用。不要把启动网址发给别人，它相当于本地后台的口令。
 
 ## 界面和快捷键
 
-- **顶部**：当前项目、对话标题、按提供商分组的模型及价格、这个模型支持的推理档位。回复时暂时不能切换模型，避免中途混用。
+- **左边**：项目分组可折叠；搜索匹配名字、第一句话或项目路径。家目录分组提示“在这里没有长期记忆”。最近项目和列表宽度保存在浏览器本地，不包含口令。
+- **顶部**：当前项目、可点击改名的对话标题、按提供商分组的模型及价格、这个模型支持的推理档位。回复时暂时不能切换模型，避免中途混用。
 - **中间**：Markdown 回复、代码块复制、表格、默认折叠的思考过程和工具卡片。向上翻时不会强制滚到底，出现“回到底部”按钮。
 - **底部输入框**：
   - Enter：发送；回复中就是“插话”。
@@ -46,7 +55,10 @@ Mermaid、公式和代码高亮在第 4 阶段补。完整插件弹窗在第 5 �
 - 对话照常保存在 pi 的 sessions 目录，终端 `pi -r` 也能看到。
 - 同一个浏览器标签页刷新或聊天 WebSocket 断线，会重新打开原对话，不重复发送未确认的消息，也不因重连而切换掉正在生成的对话。
 - 口令进 `sessionStorage` 后会从地址栏删除，这是正常的。不要把删除口令后的地址复制到新标签页当启动网址。
-- 关闭标签页再新开，标签页的临时状态可能不在；磁盘上的对话仍在。第 3 阶段还没完成时，可以用终端 `pi -r` 找旧对话。
+- 关闭标签页再新开，标签页的临时状态可能不在；磁盘上的对话仍在，可以从左侧列表或终端 `pi -r` 找旧对话。
+- “未保存”的新对话表示 pi 尚未写出会话文件，不计入已保存列表；写入后会自动刷新。
+- 切换对话时，未发送草稿在当前页面内按对话隔离，不会带到另一个项目；刷新页面后草稿不保证保留。
+- 删除当前对话后会开启新的空对话，不会继续使用或重新创建刚删除的文件。
 - 后台每次重启都会生成新口令，需重新打开终端本次打印的完整网址；已保存的对话可以恢复。
 
 不会修改你的模型、插件或 CortexKit 配置。不同页面在同一项目里共享一个活动 pi 对话，暂时不是“每个页面各聊一段”。
@@ -67,19 +79,20 @@ npm start
 
 ```bash
 npm run typecheck       # 后台、前端、脚本和 Vite 配置的 TypeScript
-npm test                # 不调用模型：10 组自动测试
+npm test                # 不调用模型：16 组自动测试
 npm run build           # 构建真实聊天网页
 npm run verify:phase1   # 后台完整验收，包含一次真实模型请求
 npm run verify:phase2   # 真实 Chrome 聊天页 + 终端 pi -r + 生产页面验收
+npm run verify:phase3   # 真实列表/改名/废纸篓/跨项目 cwd + 终端 All 比对
 ```
 
-先关闭其他占用 4317 / 5173 的后台。第 2 阶段验收使用已安装的 Google Chrome 和 Python 3；Playwright 已固定为开发依赖，不需要下载额外浏览器。日常使用网页不需要 Playwright 或 Python。
+先关闭其他占用 4317 / 5173 的后台。第 2、3 阶段验收使用已安装的 Google Chrome 和 Python 3；Playwright 已固定为开发依赖，不需要下载额外浏览器。日常使用网页不需要 Playwright 或 Python。
 
 真实浏览器验收只用 `gpt-6-luna` + `low` 聊天；其他模型只切换、不发付费请求。网络重试、插话/排队、IME、复制、折叠等边界情况另在真实 Chrome 中用模拟协议测试，避免为测试故意制造模型故障。
 
 测试创建临时项目和测试对话，结束时只用 `trash` 把它们移到废纸篓，不动你已有的对话。截图存到忽略提交的 `.pi-desk/verification/`，不会提交口令或私人对话。
 
-具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
+具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
 
 ## 后台协议（给后续开发用）
 
@@ -87,9 +100,11 @@ npm run verify:phase2   # 真实 Chrome 聊天页 + 终端 pi -r + 生产页面�
 
 | 请求 | 返回 |
 |---|---|
-| `GET /api/health` | `{ok: true, phase: 2, processes: 数量}` |
-| `GET /api/workspace` | `{cwd: 后台项目根目录}`，供首次打开页面使用 |
-| `GET /api/projects` | `{projects: [{cwd, sessions: [{path, id, cwd, title, name?, mtime}]}]}` |
+| `GET /api/health` | `{ok: true, phase: 3, processes: 数量}` |
+| `GET /api/workspace` | `{cwd: 后台项目根目录, home: 家目录}` |
+| `GET /api/projects` | `{projects: [{cwd, sessions: [{path, id, cwd, title, name?, mtime}]}], activity: [{cwd, sessionPath?, busy}]}` |
+| `POST /api/check-dir` | JSON `{path}` → `{cwd}`，检查并 realpath，不创建目录 |
+| `POST /api/sessions/delete` | JSON `{path}` → `{ok:true}`，校验普通 pi 会话文件，空闲活动进程先关闭，再 `trash` |
 
 WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式允许本机 5173 Origin，生产模式只允许本机 4317 Origin。命令行客户端也要发送 Origin。
 
@@ -102,7 +117,8 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 // 后台 → 客户端
 { op: "opened", cwd, state, messages, stats, models, commands, seq }
 { op: "rpc_result", reqId, response }
-{ op: "event", cwd, record, seq }
+{ op: "event", cwd, record, seq, sessionPath? }
+{ op: "session_deleted", cwd, sessionPath }
 { op: "exit", cwd, reason }
 { op: "error", cwd?, reqId?, message }
 ```
@@ -110,6 +126,8 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 `seq` 是当前 pi 进程 stdout 的顺序号；`opened.seq` 对应历史消息快照的响应位置，前端据此避免重复拼接缓冲的流式增量。它不写入 pi 的对话文件。旧客户端忽略新增字段仍可用。
 
 每个项目复用一个 pi 进程，空闲 30 分钟回收（忙/有待回复命令时不回收）。项目路径通过 `realpath` 归一化；已有对话路径只能属于该项目且在 pi 保存的目录内。模型连接配置/凭据字段不转发，stderr 只进后台并脱敏。
+
+两个 POST 接口需要 `Content-Type: application/json`，请求体限 16 KB。删除拒绝越界/软链接/无效会话，忙时返回 409，trash 失败只报错，没有直接删除的退路。删除成功会广播 `session_deleted`，选中该会话的页面清除旧目标并开启新对话。
 
 `open` 不带路径就是新对话，刷新/重连要带已有路径；对同一活动会话直接读取，不重新 `switch_session`。`prompt` 成功仅表示接收，必须等 `agent_settled` 才算彻底完成。权限插件的加载开关仍预留，完整工具权限在第 5 阶段实现。
 
@@ -120,6 +138,7 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 - **找不到 pi**：先在同一个终端运行 `pi --version`；必要时用 `PI_BIN=/pi/可执行文件的绝对路径 npm run dev` 指定路径。
 - **找不到模型 / 请求报错**：先在终端 pi 里确认 `cliproxy/gpt-6-luna` 能用。本项目不替你改模型配置，不自动换到更贵的模型。
 - **旧对话的思考耗时**：pi 没保存耗时就只显示“思考过程”，不会编造 N 秒；当前流式回复会计时。
-- **还没做**：完整对话列表、改名/删除、文件预览、拖附件、插件弹窗、三档权限、Electron 和 Windows 远程使用，按后续阶段完成。
+- **旧项目目录已不存在**：会话仍在列表中，也可移到废纸篓；要继续聊天，需先恢复/提供原项目目录。
+- **还没做**：文件预览、拖附件、完整插件弹窗、三档权限、Electron 和 Windows 远程使用，按后续阶段完成。
 - **未验证**：Safari、Windows 和桌面应用；当前实际验收浏览器是这台 Mac 的 Chrome。
 - **依赖审计**：项目原先固定的 Vite/ws/tsx/Mermaid 等仍有 npm audit 告警（当次 13 项，含 3 项 high），需要单独做补丁与回归；本阶段没有用 `npm audit fix --force` 跨版本升级。仅本机可信使用，避免把后台暴露到公网。

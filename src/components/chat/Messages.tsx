@@ -20,7 +20,7 @@ export function Messages() {
     stick.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
     setJump(!stick.current);
   }}><div className="messages-inner">
-    {!state.messages.some((message) => message.role === "user") && <section className="welcome"><div className="welcome-mark">π</div><h1>今天想做点什么？</h1><p>直接开始聊，pi 会在当前项目里帮你读文件、写代码和执行命令。</p><p className="muted">这是第 2 阶段聊天版；对话列表、文件预览和操作审批还未提供。</p></section>}
+    {!state.messages.some((message) => message.role === "user") && <section className="welcome"><div className="welcome-mark">π</div><h1>今天想做点什么？</h1><p>直接开始聊，pi 会在当前项目里帮你读文件、写代码和执行命令。</p><p className="muted">现在可以在左侧管理对话；文件预览和操作审批将在后续阶段提供。</p></section>}
     {state.messages.map((message) => {
       if (message.role === "system" || message.role === "toolResult" || message.role === "custom" && !message.display) return null;
       const blocks = blocksOf(message);

@@ -2,6 +2,8 @@
 let buffer = "";
 let session = 0;
 let cancelNext = false;
+let sessionFile;
+let streaming = false;
 const emit = (record) => process.stdout.write(JSON.stringify(record) + "\n");
 const respond = (cmd, data) => emit({ type: "response", id: cmd.id, command: cmd.type, success: true, data });
 process.stdin.setEncoding("utf8");
@@ -20,7 +22,9 @@ process.stdin.on("data", (chunk) => {
         respond(cmd, { cancelled: cancelNext }); cancelNext = false;
         break;
       case "switch_session": respond(cmd, { cancelled: false }); break;
-      case "get_state": respond(cmd, { sessionId: `fake-${session}`, model: { id: "test", provider: "test", baseUrl: "private-model-endpoint", headers: { authorization: "not-public" } } }); break;
+      case "get_state": respond(cmd, { sessionId: `fake-${session}`, sessionFile, isStreaming: streaming, model: { id: "test", provider: "test", baseUrl: "private-model-endpoint", headers: { authorization: "not-public" } } }); break;
+      case "test_session_file": sessionFile = cmd.path; respond(cmd, {}); break;
+      case "test_busy": streaming = cmd.enabled; emit({ type: streaming ? "agent_start" : "agent_settled", aborted: false }); respond(cmd, {}); break;
       case "get_messages": respond(cmd, { messages: [] }); break;
       case "get_session_stats": respond(cmd, { cost: 0, tokens: { total: 0 } }); break;
       case "get_available_models": respond(cmd, { models: [{ id: "test", provider: "test", baseUrl: "private-model-endpoint", secret: "not-public" }] }); break;
