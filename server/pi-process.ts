@@ -3,6 +3,8 @@ import { EventEmitter } from "node:events";
 
 // 一个项目文件夹对应一个后台 pi（RPC 模式），协议见 pi 文档 docs/rpc.md。
 export type RpcRecord = { type: string; id?: string; [key: string]: unknown };
+export const RPC_SEQUENCE = Symbol("desk sequence");
+export const sequenceOf = (record: RpcRecord): number => (record as RpcRecord & { [RPC_SEQUENCE]?: number })[RPC_SEQUENCE] ?? 0;
 export type PiProcessOptions = { binary?: string; args?: string[]; requestTimeoutMs?: number };
 type Pending = { resolve: (record: RpcRecord) => void; reject: (error: Error) => void; timer: NodeJS.Timeout };
 
@@ -13,6 +15,7 @@ export class PiProcess extends EventEmitter {
   private buffer = "";
   private readonly pending = new Map<string, Pending>();
   private nextId = 1;
+  private sequence = 0;
   private writes: Promise<void> = Promise.resolve();
   private disposal?: Promise<void>;
   exited = false;
@@ -68,6 +71,7 @@ export class PiProcess extends EventEmitter {
         this.emit("stderr", "pi emitted an invalid JSONL record (content omitted)\n");
         continue;
       }
+      (record as RpcRecord & { [RPC_SEQUENCE]?: number })[RPC_SEQUENCE] = ++this.sequence;
       this.emit("activity");
       const waiter = record.type === "response" && record.id ? this.pending.get(record.id) : undefined;
       if (waiter) {

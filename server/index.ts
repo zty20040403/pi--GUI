@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
 import { BASE_URL, DeskAuth, HOST, PORT } from "./auth.js";
 import { PiPool } from "./pi-pool.js";
-import { type RpcRecord } from "./pi-process.js";
+import { sequenceOf, type RpcRecord } from "./pi-process.js";
 import { checkSessionPath, listProjects } from "./sessions.js";
 import { logText, publicData } from "./privacy.js";
 
@@ -45,7 +45,7 @@ export function createDeskServer(options: ServerOptions = {}) {
     if (req.method !== "GET" && req.method !== "HEAD") return json(res, 405, { error: "不支持这个方法" });
     let root: string;
     try { root = await realpath(distDir); } catch {
-      return json(res, 503, { error: "尚未生成页面；当前第 1 阶段只提供后台接口" });
+      return json(res, 503, { error: "尚未生成页面，请先运行 npm run build" });
     }
     const requested = resolve(root, `.${decodeURIComponent(url.pathname)}`);
     const inside = (path: string) => {
@@ -78,12 +78,15 @@ export function createDeskServer(options: ServerOptions = {}) {
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       if (!auth.checkHttp(req)) return json(res, 401, { error: "未授权" });
       if (req.method !== "GET") return json(res, 405, { error: "不支持这个方法" });
-      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 1, processes: pool.size });
+      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 2, processes: pool.size });
       if (url.pathname === "/api/projects") return json(res, 200, { projects: await listProjects() });
+      if (url.pathname === "/api/workspace") return json(res, 200, { cwd: ROOT });
       return json(res, 404, { error: "接口不存在" });
     }
     if (!development) return serveStatic(req, res, url);
-    return json(res, 404, { error: "第 1 阶段仅提供后台接口；聊天界面在第 2 阶段实现" });
+    // npm run dev 的页面由 Vite 提供；启动网址仍从后台打印。
+    res.writeHead(302, { Location: `http://127.0.0.1:5173${url.pathname}${url.search}`, "Cache-Control": "no-store" });
+    res.end();
   }
 
   const server = createServer((req, res) => {
@@ -110,7 +113,7 @@ export function createDeskServer(options: ServerOptions = {}) {
     for (const ws of wsServer.clients) send(ws, value);
   }
   const diagnostics = new Map<string, string>();
-  pool.on("record", (cwd: string, record: RpcRecord) => broadcast({ op: "event", cwd, record }));
+  pool.on("record", (cwd: string, record: RpcRecord, seq: number) => broadcast({ op: "event", cwd, record, seq }));
   pool.on("exit", (cwd: string, reason: string) => {
     const tail = diagnostics.get(cwd);
     if (tail) process.stderr.write(`[pi] ${logText(tail)}\n`);
@@ -156,16 +159,21 @@ export function createDeskServer(options: ServerOptions = {}) {
     }
     // 同一个项目的两个 open 串行，避免混合出两个对话的状态/历史。
     const operation = (opening.get(cwd) ?? Promise.resolve()).catch(() => {}).then(async () => {
-      const cmd = typeof message.sessionPath === "string"
-        ? { type: "switch_session", sessionPath: await checkSessionPath(cwd, message.sessionPath) }
-        : { type: "new_session" };
-      if (dataOf(await pi.request(cmd)).cancelled === true) throw new Error("插件取消了打开对话");
+      const current = typeof message.sessionPath === "string" ? dataOf(await pi.request({ type: "get_state" })) : undefined;
+      // 刷新/重连同一活动对话时不 switch_session，否则会中断正在生成的回复。
+      if (!current || current.sessionFile !== message.sessionPath) {
+        const cmd = typeof message.sessionPath === "string"
+          ? { type: "switch_session", sessionPath: await checkSessionPath(cwd, message.sessionPath) }
+          : { type: "new_session" };
+        if (dataOf(await pi.request(cmd)).cancelled === true) throw new Error("插件取消了打开对话");
+      }
       const state = dataOf(await pi.request({ type: "get_state" }));
-      const messages = dataOf(await pi.request({ type: "get_messages" })).messages;
+      const messageResponse = await pi.request({ type: "get_messages" });
+      const messages = dataOf(messageResponse).messages;
       const stats = dataOf(await pi.request({ type: "get_session_stats" }));
       const models = dataOf(await pi.request({ type: "get_available_models" })).models;
       const commands = dataOf(await pi.request({ type: "get_commands" })).commands;
-      send(ws, { op: "opened", cwd, state, messages, stats, models, commands });
+      send(ws, { op: "opened", cwd, state, messages, stats, models, commands, seq: sequenceOf(messageResponse) });
     });
     opening.set(cwd, operation);
     try { await operation; } finally { if (opening.get(cwd) === operation) opening.delete(cwd); }

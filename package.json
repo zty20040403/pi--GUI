@@ -9,9 +9,10 @@
     "build": "vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test --test-concurrency=1 scripts/backend.test.ts",
+    "test": "tsx --test --test-concurrency=1 scripts/backend.test.ts scripts/chat.test.ts",
     "smoke": "tsx scripts/smoke.ts",
-    "verify:phase1": "tsx scripts/verify-phase1.ts"
+    "verify:phase1": "tsx scripts/verify-phase1.ts",
+    "verify:phase2": "tsx scripts/verify-phase2.ts"
   },
   "dependencies": {
     "mermaid": "11.4.1",
@@ -23,6 +24,7 @@
     "ws": "8.18.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/node": "22.10.1",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",

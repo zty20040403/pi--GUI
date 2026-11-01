@@ -6,9 +6,9 @@ import { logText } from "../server/privacy.js";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // 真实运行 npx tsx server/index.ts，但只在内存里接收口令，不写测试日志。
-export async function startBackend() {
-  const child = spawn("npx", ["tsx", "server/index.ts"], {
-    cwd: ROOT, detached: true, env: { ...process.env, NODE_ENV: "development" }, stdio: ["ignore", "pipe", "pipe"],
+export async function startBackend(options: { development?: boolean; production?: boolean } = {}) {
+  const child = spawn(options.development ? "npm" : "npx", options.development ? ["run", "dev"] : ["tsx", "server/index.ts"], {
+    cwd: ROOT, detached: true, env: { ...process.env, NODE_ENV: options.production ? "production" : "development" }, stdio: ["ignore", "pipe", "pipe"],
   });
   const closed = new Promise<void>((done) => child.once("close", () => done()));
   let output = "";

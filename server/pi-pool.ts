@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PiProcess, type RpcRecord } from "./pi-process.js";
+import { PiProcess, sequenceOf, type RpcRecord } from "./pi-process.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export type PoolOptions = {
@@ -61,7 +61,7 @@ export class PiPool extends EventEmitter {
     pi.on("record", (record: RpcRecord) => {
       if (record.type === "agent_start") entry.busy = true;
       if (record.type === "agent_settled") entry.busy = false;
-      this.emit("record", canonical, record);
+      this.emit("record", canonical, record, sequenceOf(record));
     });
     pi.on("stderr", (chunk: string) => this.emit("stderr", canonical, chunk));
     pi.once("exit", (reason: string) => {
