@@ -20,7 +20,7 @@ async function viteReady() {
 }
 async function pageFor(browser: Browser, target: object) {
   const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-  await context.addInitScript(({ key, target }) => { if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify(target)); }, { key: SESSION_KEY, target });
+  await context.addInitScript(({ key, target }) => { if (window !== window.top) return; if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify(target)); }, { key: SESSION_KEY, target });
   return { context, page: await context.newPage() };
 }
 async function idle(page: Page) {
@@ -61,6 +61,7 @@ async function mockTests(browser: Browser) {
   const state = () => ({ model, thinkingLevel: "low", sessionId: current.id, sessionFile: current.path, sessionName: current.name, isStreaming: busy.has(current.path) });
   const grouped = () => { const map = new Map<string, any[]>(); for (const value of sessions.values()) if (!value.virtual) map.set(value.cwd, [...(map.get(value.cwd) ?? []), value]); return [...map].map(([cwd, sessions]) => ({ cwd, sessions })); };
   await page.route("**/api/workspace", (route) => route.fulfill({ json: { cwd: "/fixture-a", home: "/fixture-home" } }));
+  await page.route("**/api/tree**", (route) => route.fulfill({ json: { cwd: "/fixture-a", dir: "/fixture-a", entries: [], truncated: false } }));
   await page.route("**/api/projects", (route) => route.fulfill({ json: { projects: grouped(), activity: [...sessions.values()].map((session) => ({ cwd: session.cwd, sessionPath: session.path, busy: busy.has(session.path) })) } }));
   await page.route("**/api/check-dir", (route) => { const path = route.request().postDataJSON().path; return path === "/fixture-b" ? route.fulfill({ json: { cwd: path } }) : route.fulfill({ status: 400, json: { error: "文件夹不存在" } }); });
   await page.route("**/api/sessions/delete", async (route) => {
@@ -109,7 +110,7 @@ async function mockTests(browser: Browser) {
     await menu(page, "/fixture-a.jsonl", "删除"); await page.getByRole("button", { name: "移到废纸篓" }).click(); await expect(page.getByRole("dialog")).toHaveCount(0); await idle(page);
     await expect(row(page, "/fixture-a.jsonl")).toHaveCount(0); assert.equal(received.filter((message) => message.op === "open").at(-1).sessionPath, undefined);
     const divider = page.getByRole("separator", { name: "调整对话列表宽度" }); const old = Number(await divider.getAttribute("aria-valuenow")); await divider.focus(); await divider.press("ArrowRight"); await expect(divider).toHaveAttribute("aria-valuenow", String(old + 10));
-    await page.getByRole("button", { name: "收起对话列表", exact: true }).click(); await expect(page.getByRole("complementary")).toHaveCount(0); await page.getByRole("button", { name: "展开对话列表", exact: true }).click();
+    await page.getByRole("button", { name: "收起对话列表", exact: true }).click(); await expect(page.getByRole("complementary", { name: "项目和对话列表" })).toHaveCount(0); await page.getByRole("button", { name: "展开对话列表", exact: true }).click();
     await page.setViewportSize({ width: 600, height: 800 }); await page.locator(".session-sidebar").getByRole("button", { name: "收起对话列表" }).click();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     console.log("左栏补充浏览器测试通过：搜索/折叠、家目录提示、跨项目改名、草稿隔离、后台回复标记、目录错误、删除失败/取消/当前删除恢复、收起/宽度/窄窗口");

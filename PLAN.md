@@ -342,10 +342,12 @@ ls "$P"   # 重点看 rpc.md、rpc-commands.md、json.md、rpc-extension-ui.md�
 4. 聊天里的工具卡片点路径 → 右边打开预览；AI 改文件 → 文件树加圆点、已打开的预览刷新。
 
 **验收**
-- [ ] 准备一个测试文件夹 `scripts/fixtures/`（提交进仓库），放每种格式各一个小文件（md 里要有相对路径图片、Mermaid、公式；csv；xlsx；docx；png；svg；pdf；html 带一段 `<script>alert(1)</script>`；mp3 或 mp4；一个二进制文件）。逐个点开，都按 §3.4 显示。
-- [ ] html 里的脚本默认不运行。
-- [ ] 让 AI "在 notes.md 里加一行字"，右边已打开的 notes.md 自动刷新。
-- [ ] 请求 `/api/file?path=~/.ssh/id_ed25519` 被拒绝。
+- [x] 准备一个测试文件夹 `scripts/fixtures/`（提交进仓库），放每种格式各一个小文件（md 里要有相对路径图片、Mermaid、公式；csv；xlsx；docx；png；svg；pdf；html 带一段 `<script>alert(1)</script>`；mp3 或 mp4；一个二进制文件）。逐个点开，都按 §3.4 显示。
+- [x] html 里的脚本默认不运行。
+- [x] 让 AI "在 notes.md 里加一行字"，右边已打开的 notes.md 自动刷新。
+- [x] 请求 `/api/file?path=~/.ssh/id_ed25519` 被拒绝。
+
+合成样例在 `scripts/fixtures/preview/`；实际验收记录及复跑方式见 [`docs/phase-4-verification.md`](docs/phase-4-verification.md)。
 
 ### 第 5 阶段：拖文件 + 插件弹窗 + 三档权限
 

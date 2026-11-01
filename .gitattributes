@@ -1,0 +1,12 @@
+# Preview documents/media are binary; preserve exact bytes and PDF xref spacing.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.webp binary
+*.mp3 binary
+*.mp4 binary
+*.bin binary
+*.docx binary
+*.xlsx binary
+*.pptx binary

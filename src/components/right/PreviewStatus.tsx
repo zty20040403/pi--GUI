@@ -1,0 +1,1 @@
+export function PreviewStatus({ error }: { error?: string }) { return error ? <p className="preview-notice error-text" role="alert">{error}</p> : <p className="preview-notice" role="status">正在载入预览…</p>; }

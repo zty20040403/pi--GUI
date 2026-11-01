@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { blocksOf } from "../../api/state";
 import { useChat } from "../../api/ChatProvider";
 import { Markdown } from "./Markdown";
@@ -14,13 +14,18 @@ export function Messages() {
     if (sessionId.current !== state.session.sessionId) { stick.current = true; setJump(false); sessionId.current = state.session.sessionId; }
     if (stick.current && viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight;
   }, [state.messages, state.tools, state.session.sessionId]);
+  useEffect(() => {
+    const inner = viewport.current?.querySelector(".messages-inner"); if (!inner) return;
+    const observer = new ResizeObserver(() => { if (stick.current && viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight; });
+    observer.observe(inner); return () => observer.disconnect();
+  }, []);
   const referenced = new Set(state.messages.flatMap((message) => blocksOf(message).filter((block) => block.type === "toolCall").map((block) => block.id)));
   return <div className="messages-shell"><div className="messages-scroll" ref={viewport} data-testid="messages-scroll" onScroll={() => {
     const element = viewport.current!;
     stick.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
     setJump(!stick.current);
   }}><div className="messages-inner">
-    {!state.messages.some((message) => message.role === "user") && <section className="welcome"><div className="welcome-mark">π</div><h1>今天想做点什么？</h1><p>直接开始聊，pi 会在当前项目里帮你读文件、写代码和执行命令。</p><p className="muted">现在可以在左侧管理对话；文件预览和操作审批将在后续阶段提供。</p></section>}
+    {!state.messages.some((message) => message.role === "user") && <section className="welcome"><div className="welcome-mark">π</div><h1>今天想做点什么？</h1><p>直接开始聊，pi 会在当前项目里帮你读文件、写代码和执行命令。</p><p className="muted">左侧管理对话，右侧只读预览文件；附件和操作审批将在第 5 阶段提供。</p></section>}
     {state.messages.map((message) => {
       if (message.role === "system" || message.role === "toolResult" || message.role === "custom" && !message.display) return null;
       const blocks = blocksOf(message);

@@ -1,4 +1,6 @@
 import type { Tool, WireRecord } from "../../api/types";
+import { useChat } from "../../api/ChatProvider";
+import { useFiles } from "../../api/FileProvider";
 
 export function truncateOutput(text: string, limit = 12000): string {
   if (text.length <= limit) return text;
@@ -19,9 +21,11 @@ function summary(tool: Tool) {
   return pretty(args);
 }
 export function ToolCard({ tool }: { tool: Tool }) {
+  const { state } = useChat(); const { openFile } = useFiles();
+  const path = ["read", "edit", "write"].includes(tool.name) && typeof tool.args.path === "string" ? tool.args.path : undefined;
   const labels = { pending: "待执行", running: "执行中", done: "完成", error: "失败" };
   return <details className={`tool-card ${tool.status === "error" ? "tool-error" : ""}`} data-tool={tool.name}>
-    <summary><span className={`tool-dot ${tool.status}`} /><strong>{tool.name}</strong><span className="tool-summary">{String(summary(tool)).slice(0, 240)}</span><span className="tool-state">{labels[tool.status]}</span></summary>
+    <summary><span className={`tool-dot ${tool.status}`} /><strong>{tool.name}</strong>{path ? <button className="tool-summary tool-path" title="点击在右侧预览文件" aria-label={`预览工具文件 ${path}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void openFile(state.cwd, path); }}>{path}</button> : <span className="tool-summary">{String(summary(tool)).slice(0, 240)}</span>}<span className="tool-state">{labels[tool.status]}</span></summary>
     <div className="tool-detail">
       <div className="detail-label">{tool.name === "bash" ? "命令" : "参数"}</div>
       <pre>{truncateOutput(tool.name === "bash" ? String(tool.args.command ?? "") : pretty(tool.args))}</pre>

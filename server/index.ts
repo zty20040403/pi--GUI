@@ -14,6 +14,8 @@ import { checkSessionPath, invalidateSession, listProjects, savedSession, SESSIO
 import { checkDirectory } from "./directories.js";
 import { HttpError, readJson } from "./http.js";
 import { logText, publicData } from "./privacy.js";
+import { FileService, serveFile } from "./files.js";
+import { OfficePreview } from "./office.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MIME: Record<string, string> = {
@@ -31,7 +33,7 @@ function dataOf(response: RpcRecord): ObjectRecord {
   return isObject(response.data) ? response.data : {};
 }
 
-export type ServerOptions = { pool?: PiPool; development?: boolean; distDir?: string; sessionsDir?: string; trash?: (path: string) => Promise<void> };
+export type ServerOptions = { pool?: PiPool; development?: boolean; distDir?: string; sessionsDir?: string; trash?: (path: string) => Promise<void>; systemOpen?: (path: string, reveal: boolean) => Promise<void> };
 
 export function createDeskServer(options: ServerOptions = {}) {
   const development = options.development ?? process.env.NODE_ENV !== "production";
@@ -43,6 +45,12 @@ export function createDeskServer(options: ServerOptions = {}) {
   const deleting = new Set<string>();
   const sessionsDir = options.sessionsDir ?? SESSIONS_DIR;
   const trash = options.trash ?? (async (path: string) => { await promisify(execFile)("trash", [path]); });
+  const files = new FileService();
+  const office = new OfficePreview();
+  const systemOpen = options.systemOpen ?? (async (path: string, reveal: boolean) => {
+    try { await promisify(execFile)("open", [...(reveal ? ["-R"] : []), path], { timeout: 10000 }); }
+    catch { throw new HttpError(500, "系统打开失败，请确认 macOS 可用"); }
+  });
 
   function json(res: ServerResponse, status: number, body: unknown) {
     res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -85,6 +93,23 @@ export function createDeskServer(options: ServerOptions = {}) {
     const url = new URL(req.url ?? "/", BASE_URL);
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       if (!auth.checkHttp(req)) return json(res, 401, { error: "未授权" });
+      if (req.method === "POST" && ["/api/open", "/api/reveal"].includes(url.pathname)) {
+        const body = await readJson(req);
+        const file = await files.checked(body.cwd, body.path);
+        await systemOpen(file.path, url.pathname === "/api/reveal");
+        return json(res, 200, { ok: true });
+      }
+      if (["GET", "HEAD"].includes(req.method ?? "") && url.pathname === "/api/file") {
+        const file = await files.checked(url.searchParams.get("cwd"), url.searchParams.get("path"));
+        return serveFile(req, res, file);
+      }
+      if (req.method === "GET" && url.pathname === "/api/tree") return json(res, 200, await files.tree(url.searchParams.get("cwd"), url.searchParams.get("dir") ?? "."));
+      if (req.method === "GET" && url.pathname === "/api/file-info") return json(res, 200, await files.info(url.searchParams.get("cwd"), url.searchParams.get("path")));
+      if (["GET", "HEAD"].includes(req.method ?? "") && url.pathname === "/api/office") {
+        const source = await files.checked(url.searchParams.get("cwd"), url.searchParams.get("path"));
+        const path = await office.convert(source); const info = await stat(path);
+        return serveFile(req, res, { path, size: info.size, mtimeMs: info.mtimeMs, dev: info.dev, ino: info.ino }, "application/pdf");
+      }
       if (req.method === "POST" && url.pathname === "/api/check-dir") {
         const body = await readJson(req);
         return json(res, 200, { cwd: await checkDirectory(body.path) });
@@ -103,7 +128,7 @@ export function createDeskServer(options: ServerOptions = {}) {
         } finally { deleting.delete(session.path); }
       }
       if (req.method !== "GET") return json(res, 405, { error: "不支持这个方法" });
-      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 3, processes: pool.size });
+      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 4, processes: pool.size });
       if (url.pathname === "/api/projects") return json(res, 200, { projects: await listProjects(sessionsDir), activity: pool.activity });
       if (url.pathname === "/api/workspace") return json(res, 200, { cwd: ROOT, home: homedir() });
       return json(res, 404, { error: "接口不存在" });
@@ -201,6 +226,7 @@ export function createDeskServer(options: ServerOptions = {}) {
       const stats = dataOf(await pi.request({ type: "get_session_stats" }));
       const models = dataOf(await pi.request({ type: "get_available_models" })).models;
       const commands = dataOf(await pi.request({ type: "get_commands" })).commands;
+      files.register(cwd);
       send(ws, { op: "opened", cwd, state, messages, stats, models, commands, seq: sequenceOf(messageResponse) });
     });
     opening.set(cwd, operation);

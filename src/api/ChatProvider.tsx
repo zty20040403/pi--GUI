@@ -1,11 +1,13 @@
-import { createContext, useContext, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { RpcClient } from "./client";
 import { initialState, reducer, type ChatState } from "./state";
 import { http, savedTarget, SESSION_KEY } from "./storage";
 import { readRecents, RECENTS_KEY, rememberProject } from "./projects";
 import type { Activity, Project, RecentProject, SessionState, SessionSummary, Stats, Target, WireRecord } from "./types";
 
+export type RecordEvent = { cwd: string; record: WireRecord; sessionPath?: string };
 type ContextValue = {
+  subscribeRecords: (listener: (event: RecordEvent) => void) => () => void;
   state: ChatState; projects: Project[]; home: string; recents: RecentProject[]; running: Record<string, boolean>;
   projectsLoading: boolean; projectsError: string; switching: boolean; refreshProjects: () => Promise<void>;
   send: (message: string, behavior?: "steer" | "followUp") => Promise<void>; stop: () => Promise<string[]>;
@@ -28,6 +30,10 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
   const [projectsError, setProjectsError] = useState("");
   const [switching, setSwitching] = useState(false);
   const client = useRef<RpcClient>();
+  const recordListeners = useRef(new Set<(event: RecordEvent) => void>());
+  const subscribeRecords = useCallback((listener: (event: RecordEvent) => void) => {
+    recordListeners.current.add(listener); return () => { recordListeners.current.delete(listener); };
+  }, []);
   const refresh = useRef<() => Promise<void>>(async () => {});
   const refreshProjects = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
@@ -97,6 +103,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
       }
       if (event.kind === "event") {
         const record = event.value;
+        for (const listener of recordListeners.current) listener({ cwd: event.cwd, record, sessionPath: event.sessionPath });
         if (["agent_start", "agent_settled", "desk_process_exit"].includes(record.type)) {
           activityVersion++;
           const path = event.sessionPath ?? known[event.cwd];
@@ -161,7 +168,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
   async function deleteSession(session: SessionSummary) {
     await http("/api/sessions/delete", token, { path: session.path }); await refreshProjects.current();
   }
-  return <Context.Provider value={{ state, projects, home, recents, running, projectsLoading, projectsError, switching,
+  return <Context.Provider value={{ subscribeRecords, state, projects, home, recents, running, projectsLoading, projectsError, switching,
     refreshProjects: () => refreshProjects.current(), send, stop, changeModel, changeThinking, open, openFolder, renameSession, deleteSession,
     reconnect: () => client.current?.reconnect(), clearError: () => dispatch({ type: "error", value: undefined }) }}>{children}</Context.Provider>;
 }

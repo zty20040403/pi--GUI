@@ -2,7 +2,7 @@
 
 Kenneth 的 pi 图形客户端，底层遥控本机现有的 pi。完整方案见 [`PLAN.md`](PLAN.md)，开发规矩见 [`AGENTS.md`](AGENTS.md)。
 
-**当前进度：第 3 阶段，已经能聊天并在左侧管理项目和对话。右侧文件面板和 Mac 应用还没做。**
+**当前进度：第 4 阶段，三栏浏览器版已能聊天、管理对话和只读预览文件。附件、完整插件弹窗、操作审批和 Mac 应用还没做。**
 
 ## 怎么打开试
 
@@ -38,7 +38,8 @@ npm run dev
 
 - **左边**：项目分组可折叠；搜索匹配名字、第一句话或项目路径。家目录分组提示“在这里没有长期记忆”。最近项目和列表宽度保存在浏览器本地，不包含口令。
 - **顶部**：当前项目、可点击改名的对话标题、按提供商分组的模型及价格、这个模型支持的推理档位。回复时暂时不能切换模型，避免中途混用。
-- **中间**：Markdown 回复、代码块复制、表格、默认折叠的思考过程和工具卡片。向上翻时不会强制滚到底，出现“回到底部”按钮。
+- **中间**：Markdown、代码高亮/复制、表格、Mermaid 图和公式；默认折叠的思考过程和工具卡片。工具里的文件路径可点击，在右侧预览。向上翻时不会强制滚到底，出现“回到底部”按钮。
+- **右边**：第一个固定标签“文件”是按需展开的项目树；点击文件开预览，同一个文件不重复开标签。顶部“文件 ▤”或面板 `×` 收起；拖面板左边界调整宽度。切项目时标签按项目隔离，当前标签页刷新后仍保留。
 - **底部输入框**：
   - Enter：发送；回复中就是“插话”。
   - Shift+Enter：换行；中文输入法的确认键不会误发送。
@@ -48,7 +49,29 @@ npm run dev
 - **状态栏**：本对话花费、上下文用量、pi 插件送来的状态。
 - **网络提示**：等待模型超过 5 秒会显示等待时长；重试显示次数；最终失败显示原因及“重试”。发送失败时保留输入内容。
 
-Mermaid、公式和代码高亮在第 4 阶段补。完整插件弹窗在第 5 阶段做：当前遇到需要选项/确认/输入的插件交互会安全取消并提示，不能靠本版页面完成 `/plan` 等需要弹窗的完整流程；请暂时在终端使用。
+完整插件弹窗在第 5 阶段做：当前遇到需要选项/确认/输入的插件交互会安全取消并提示，不能靠本版页面完成 `/plan` 等需要弹窗的完整流程；请暂时在终端使用。
+
+## 怎么试文件预览
+
+1. 在右侧“文件”里展开 `scripts` → `fixtures` → `preview`，逐个点 `sample.md`、`sample.xlsx`、`sample.docx`、图片、PDF、网页或 MP3。
+2. Markdown 能看到相对图片、图表、公式和高亮代码；“源码”切换到带行号的文本。CSV/TSV 可切首行表头，Excel 每张表一个标签。
+3. 图片可以放大/缩小并拖动；PDF 用 Chrome 自带查看器；音视频用原生播放控件。
+4. HTML **默认禁用脚本**。只对可信网页勾“允许运行脚本”；即使开启，也不能访问主页面、口令或后台，外部请求仍禁用。
+5. 文件顶部有“用默认软件打开”“在 Finder 中显示”“刷新”。AI 改动已打开的文件会自动刷新，树里出现小圆点；文件修改时间也会定时检查。
+
+要试“让 AI 改 notes.md”，建议先复制样例到临时目录，不修改仓库的合成样例：
+
+```bash
+cd ~/Desktop/"pi harness"
+mkdir -p /tmp/pi-desk-demo
+cp -R scripts/fixtures/preview/. /tmp/pi-desk-demo/
+```
+
+然后左侧“打开文件夹”填 `/tmp/pi-desk-demo`，选 **gpt-6-luna / low**，右侧打开 `notes.md`，发：“在 notes.md 末尾加一行测试文字”。路径显示成 `/private/tmp/...` 是 macOS 的正常路径归一化。
+
+Word 预览会提示“排版可能和原文不同”。PPT、旧 Word/Excel 有 LibreOffice 时可尝试隔离转换为 PDF；本机没安装，已验证显示安装提示和默认软件打开按钮，**安装后的转换分支尚未实测**。
+
+超过 1 MB 的文本/Markdown/网页/CSV 只读取前 1 MB；非常长的代码降级为纯文本以免卡住。超过 50 MB 的文件只显示信息，不读取内容。Excel/Word 在有超时限制的独立 worker 中解析，并限制 ZIP 展开体积和表格数量。
 
 ## 对话会不会丢
 
@@ -79,20 +102,22 @@ npm start
 
 ```bash
 npm run typecheck       # 后台、前端、脚本和 Vite 配置的 TypeScript
-npm test                # 不调用模型：16 组自动测试
+npm test                # 不调用模型：24 组自动测试
 npm run build           # 构建真实聊天网页
 npm run verify:phase1   # 后台完整验收，包含一次真实模型请求
 npm run verify:phase2   # 真实 Chrome 聊天页 + 终端 pi -r + 生产页面验收
 npm run verify:phase3   # 真实列表/改名/废纸篓/跨项目 cwd + 终端 All 比对
+npm run verify:phase4   # 每种预览/HTML 隔离/真实 AI 改文件/敏感路径 + 生产 worker
+npm run fixtures        # 重新生成完全合成的测试文件（不读取私人文件）
 ```
 
-先关闭其他占用 4317 / 5173 的后台。第 2、3 阶段验收使用已安装的 Google Chrome 和 Python 3；Playwright 已固定为开发依赖，不需要下载额外浏览器。日常使用网页不需要 Playwright 或 Python。
+先关闭其他占用 4317 / 5173 的后台。第 2–4 阶段验收使用已安装的 Google Chrome 和 Python 3；Playwright 已固定为开发依赖，不需要下载额外浏览器。日常使用网页不需要 Playwright 或 Python。
 
 真实浏览器验收只用 `gpt-6-luna` + `low` 聊天；其他模型只切换、不发付费请求。网络重试、插话/排队、IME、复制、折叠等边界情况另在真实 Chrome 中用模拟协议测试，避免为测试故意制造模型故障。
 
 测试创建临时项目和测试对话，结束时只用 `trash` 把它们移到废纸篓，不动你已有的对话。截图存到忽略提交的 `.pi-desk/verification/`，不会提交口令或私人对话。
 
-具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
+具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
 
 ## 后台协议（给后续开发用）
 
@@ -100,11 +125,16 @@ npm run verify:phase3   # 真实列表/改名/废纸篓/跨项目 cwd + 终端 A
 
 | 请求 | 返回 |
 |---|---|
-| `GET /api/health` | `{ok: true, phase: 3, processes: 数量}` |
+| `GET /api/health` | `{ok: true, phase: 4, processes: 数量}` |
 | `GET /api/workspace` | `{cwd: 后台项目根目录, home: 家目录}` |
 | `GET /api/projects` | `{projects: [{cwd, sessions: [{path, id, cwd, title, name?, mtime}]}], activity: [{cwd, sessionPath?, busy}]}` |
 | `POST /api/check-dir` | JSON `{path}` → `{cwd}`，检查并 realpath，不创建目录 |
 | `POST /api/sessions/delete` | JSON `{path}` → `{ok:true}`，校验普通 pi 会话文件，空闲活动进程先关闭，再 `trash` |
+| `GET /api/tree?cwd=&dir=` | 一层目录，目录在前，过滤隐藏/敏感/越界链接，超过 5000 项提示 |
+| `GET /api/file-info?cwd=&path=` | `{cwd,path,name,size,mtime,mime,binary,tooLarge}`；前 8 KB 检测 NUL，大文件不读取 |
+| `GET /api/file?cwd=&path=` / `HEAD` | 原始字节和 MIME；单段 Range/206/416、文件大小和修改时间头，50 MB 上限 |
+| `GET /api/office?cwd=&path=` | 可用时隔离转换并返回缓存 PDF；缺失 501，失败/超时 422 |
+| `POST /api/open` / `/api/reveal` | JSON `{cwd,path}`，检查后用参数数组执行 macOS `open` / `open -R` |
 
 WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式允许本机 5173 Origin，生产模式只允许本机 4317 Origin。命令行客户端也要发送 Origin。
 
@@ -127,7 +157,9 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 
 每个项目复用一个 pi 进程，空闲 30 分钟回收（忙/有待回复命令时不回收）。项目路径通过 `realpath` 归一化；已有对话路径只能属于该项目且在 pi 保存的目录内。模型连接配置/凭据字段不转发，stderr 只进后台并脱敏。
 
-两个 POST 接口需要 `Content-Type: application/json`，请求体限 16 KB。删除拒绝越界/软链接/无效会话，忙时返回 409，trash 失败只报错，没有直接删除的退路。删除成功会广播 `session_deleted`，选中该会话的页面清除旧目标并开启新对话。
+POST 接口需要 `Content-Type: application/json`，请求体限 16 KB。删除拒绝越界/软链接/无效会话，忙时返回 409，trash 失败只报错，没有直接删除的退路。删除成功会广播 `session_deleted`，选中该会话的页面清除旧目标并开启新对话。
+
+文件接口只允许当前后台已成功打开的项目，先 `realpath` 再判范围，拒绝敏感目录（包括 pi 模型/会话配置目录）和 `.env` 等凭据文件。前端用带 Bearer 的 fetch 取文件，再以临时 Blob URL 显示图片、PDF、媒体；**不在文件 URL 上附加口令**。文本前 1 MB 用 Range 读取；关闭/切换预览会取消请求并回收对象 URL/文档 worker。
 
 `open` 不带路径就是新对话，刷新/重连要带已有路径；对同一活动会话直接读取，不重新 `switch_session`。`prompt` 成功仅表示接收，必须等 `agent_settled` 才算彻底完成。权限插件的加载开关仍预留，完整工具权限在第 5 阶段实现。
 
@@ -139,6 +171,6 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 - **找不到模型 / 请求报错**：先在终端 pi 里确认 `cliproxy/gpt-6-luna` 能用。本项目不替你改模型配置，不自动换到更贵的模型。
 - **旧对话的思考耗时**：pi 没保存耗时就只显示“思考过程”，不会编造 N 秒；当前流式回复会计时。
 - **旧项目目录已不存在**：会话仍在列表中，也可移到废纸篓；要继续聊天，需先恢复/提供原项目目录。
-- **还没做**：文件预览、拖附件、完整插件弹窗、三档权限、Electron 和 Windows 远程使用，按后续阶段完成。
-- **未验证**：Safari、Windows 和桌面应用；当前实际验收浏览器是这台 Mac 的 Chrome。
-- **依赖审计**：项目原先固定的 Vite/ws/tsx/Mermaid 等仍有 npm audit 告警（当次 13 项，含 3 项 high），需要单独做补丁与回归；本阶段没有用 `npm audit fix --force` 跨版本升级。仅本机可信使用，避免把后台暴露到公网。
+- **还没做**：拖附件、完整插件弹窗、三档权限、Electron 和 Windows 远程使用，按后续阶段完成。
+- **未验证**：Safari、Windows、桌面应用及装好 LibreOffice 后的隔离转换；系统打开/Finder 接线在自动测试中验证参数与路径校验，没有自动启动用户的 GUI 应用。当前实际验收浏览器是这台 Mac 的 Chrome。
+- **依赖审计**：本阶段固定并更新 ws/tsx/Vite 同大版本补丁、Mermaid 和 KaTeX（统一到修复版）。仍有 **11 项告警：10 moderate、1 high**，主要是 Vite 开发链和 ExcelJS 存档依赖；high 对应 Windows launch-editor，当前后台在 Mac，生产页面不运行 Vite 开发服务器。仍需独立补丁验证，不宣称审计全绿；没有用 `npm audit fix --force`。只在本机可信项目使用，不暴露到公网。

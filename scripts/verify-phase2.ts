@@ -26,6 +26,7 @@ async function setupPage(browser: Browser, target: { cwd: string; sessionPath?: 
   const context = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: "light" });
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await context.addInitScript(({ target, key }) => {
+    if (window !== window.top) return;
     if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify(target));
     const Native = window.WebSocket;
     const testWindow = window as unknown as { deskSockets: WebSocket[] };
@@ -60,6 +61,7 @@ async function mockBrowserTests(browser: Browser) {
   const result = (reqId: string, data: any) => route.send(JSON.stringify({ op: "rpc_result", reqId, response: { success: true, data } }));
   await page.route("**/api/workspace", (route) => route.fulfill({ json: { cwd: "/fixture" } }));
   await page.route("**/api/projects", (route) => route.fulfill({ json: { projects: [], activity: [] } }));
+  await page.route("**/api/tree**", (route) => route.fulfill({ json: { cwd: "/fixture", dir: "/fixture", entries: [], truncated: false } }));
   await page.routeWebSocket(/\/ws\?/, (ws) => {
     route = ws;
     ws.onMessage((raw) => {

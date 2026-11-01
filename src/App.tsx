@@ -1,6 +1,8 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useChat } from "./api/ChatProvider";
 import { blocksOf } from "./api/state";
+import { useFiles } from "./api/FileProvider";
+import { FilePanel } from "./components/right/FilePanel";
 import { Composer } from "./components/chat/Composer";
 import { Messages } from "./components/chat/Messages";
 import { SessionSidebar } from "./components/sidebar/SessionSidebar";
@@ -15,6 +17,7 @@ const groupLabel = (provider: string) => provider.toLowerCase() === "cliproxy" ?
 
 export default function App() {
   const { state, projects, switching, changeModel, changeThinking, open, reconnect } = useChat();
+  const files = useFiles();
   const [changing, setChanging] = useState(false);
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<SessionDialogRequest>();
@@ -41,14 +44,14 @@ export default function App() {
   const elapsed = state.waitingSince ? Math.max(0, Math.floor((now - state.waitingSince) / 1000)) : 0;
   const usage = state.stats.contextUsage;
   const closeSidebar = () => setLayout((value) => ({ ...value, open: false }));
-  return <div className="desk-layout" style={{ "--sidebar-width": `${layout.width}px` } as CSSProperties}>
+  return <div className="desk-layout" style={{ "--sidebar-width": `${layout.width}px`, "--file-width": `${files.width}px` } as CSSProperties}>
     <SessionSidebar hidden={!layout.open} onDialog={setDialog} onClose={closeSidebar} />
     {layout.open && <><button className="sidebar-backdrop" aria-label="关闭对话列表遮罩" onClick={closeSidebar} /><div className="sidebar-resizer" role="separator" aria-label="调整对话列表宽度" aria-orientation="vertical" aria-valuemin={220} aria-valuemax={460} aria-valuenow={layout.width} tabIndex={0}
       onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)} onPointerMove={(event) => {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) setLayout((value) => ({ ...value, width: Math.max(220, Math.min(460, event.clientX)) }));
       }} onKeyDown={(event) => { if (["ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); setLayout((value) => ({ ...value, width: Math.max(220, Math.min(460, value.width + (event.key === "ArrowRight" ? 10 : -10))) })); } }} /></>}
     <main className="app-shell">
-      <header className="topbar"><button className="quiet-button" aria-label={layout.open ? "收起对话列表" : "展开对话列表"} onClick={() => setLayout((value) => ({ ...value, open: !value.open }))}>☰</button><div className="brand"><span>π</span><strong>pi desk</strong></div>
+      <header className="topbar"><button className="quiet-button" aria-label={layout.open ? "收起对话列表" : "展开对话列表"} onClick={() => { if (matchMedia("(max-width:1100px)").matches) files.hide(); setLayout((value) => ({ ...value, open: !value.open })); }}>☰</button><div className="brand"><span>π</span><strong>pi desk</strong></div>
         <div className="conversation-title"><span title={state.cwd}>{project}</span><button className="conversation-name" title="点击改名" aria-label="重命名当前对话" disabled={disabled || !selected} onClick={() => selected && setDialog({ kind: "rename", session: selected })}>{title}</button></div>
         <div className="model-controls"><label>模型<select aria-label="模型" disabled={disabled || !state.models.length} value={state.session.model ? JSON.stringify([state.session.model.provider, state.session.model.id]) : ""} onChange={(event) => {
           const [provider, id] = JSON.parse(event.target.value); void configure(() => changeModel(provider, id));
@@ -56,7 +59,7 @@ export default function App() {
           {model.name || model.id}{model.cost ? ` · 入 $${model.cost.input}/M · 出 $${model.cost.output}/M` : ""}
         </option>)}</optgroup>)}</select></label><label>推理<select aria-label="推理强度" value={state.session.thinkingLevel ?? ""} disabled={disabled || !state.levels.length} onChange={(event) => void configure(() => changeThinking(event.target.value))}>
           {!state.levels.length && <option value="">加载中…</option>}{state.levels.map((level) => <option key={level} value={level}>{level}</option>)}
-        </select></label></div>
+        </select></label></div><button className="quiet-button" aria-label={files.shown ? "隐藏文件面板" : "展开文件面板"} onClick={() => { if (matchMedia("(max-width:900px)").matches) closeSidebar(); files.toggle(); }}>文件 ▤</button>
       </header>
       <div className="workspace-bar"><span className={state.connection === "ready" ? "connection-ok" : "muted"} data-testid="connection-status">● {connection}</span>
         {state.connection !== "ready" && <button className="quiet-button" onClick={reconnect}>重新连接</button>}
@@ -70,6 +73,10 @@ export default function App() {
         <span className="plugin-statuses" title={Object.values(state.statuses).join(" · ")}>{Object.entries(state.statuses).map(([key, value]) => <span key={key}>{value}</span>)}</span>
       </footer>
     </main>
+    {files.shown && <><button className="file-backdrop" aria-label="关闭文件面板遮罩" onClick={files.hide} /><div className="file-resizer" role="separator" aria-label="调整文件面板宽度" aria-orientation="vertical" aria-valuemin={280} aria-valuemax={720} aria-valuenow={files.width} tabIndex={0}
+      onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)} onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) files.setWidth(window.innerWidth - event.clientX); }}
+      onKeyDown={(event) => { if (["ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); files.setWidth(files.width + (event.key === "ArrowLeft" ? 10 : -10)); } }} /></>}
+    <FilePanel />
     {dialog && <SessionDialog key={dialog.kind === "folder" ? "folder" : `${dialog.kind}:${dialog.session.path}`} request={dialog} close={() => setDialog(undefined)} />}
   </div>;
 }

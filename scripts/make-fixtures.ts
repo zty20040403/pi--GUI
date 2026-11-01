@@ -1,0 +1,11 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { resolve } from "node:path";
+import ExcelJS from "exceljs";
+const exec = promisify(execFile);
+const { stdout } = await exec("python3", ["scripts/make-fixtures.py"]); process.stdout.write(stdout);
+const workbook = new ExcelJS.Workbook(); workbook.creator = "pi desk synthetic fixture"; workbook.created = new Date("2026-01-01T00:00:00Z"); workbook.modified = workbook.created;
+const first = workbook.addWorksheet("数据"); first.addRows([["项目", "数值"], ["合成数据", 42], ["公式缓存", { formula: "SUM(B2,8)", result: 50 }]]); first.getRow(1).font = { bold: true };
+const second = workbook.addWorksheet("统计"); second.addRows([["指标", "数量"], ["工作表", 2]]);
+await workbook.xlsx.writeFile(resolve("scripts/fixtures/preview/sample.xlsx"));
+console.log("合成 XLSX 样例已生成（两个表，包含缓存公式数值）");
