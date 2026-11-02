@@ -1,4 +1,5 @@
 import type { Target } from "./types";
+import { DeskError } from "../../shared/errors";
 export const TOKEN_KEY = "pi-desk.token";
 export const SESSION_KEY = "pi-desk.session";
 export function consumeToken(url: URL, storage: Storage, replaceUrl: (url: string) => void): string {
@@ -19,9 +20,9 @@ export async function http<T>(path: string, token: string, body?: unknown): Prom
   const response = await fetch(path, { headers: { Authorization: `Bearer ${token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
     ...(body !== undefined ? { method: "POST", body: JSON.stringify(body) } : {}) });
   if (!response.ok) {
-    let detail: string | undefined;
-    try { detail = (await response.json()).error; } catch {}
-    throw new Error(response.status === 401 ? "口令失效，请用后台本次打印的网址重新打开" : detail ?? `请求失败（${response.status}）`);
+    let detail: { error?: string; errorDetails?: string } = {};
+    try { detail = await response.json(); } catch {}
+    throw new DeskError({ message: response.status === 401 ? "口令失效，请用后台本次打印的网址重新打开" : detail.error ?? `请求失败（${response.status}）`, details: detail.errorDetails });
   }
   return response.json();
 }

@@ -3,7 +3,8 @@ import { useChat } from "./ChatProvider";
 import { fileInfo, type FileInfo } from "./files";
 import { emptyFileProject, fileReducer, readFileTabs, type FileProject } from "./file-state";
 import type { WireRecord } from "./types";
-type ContextValue = { project: FileProject; shown: boolean; width: number; error: string; toggle: () => void; hide: () => void; setWidth: (value: number) => void;
+import { errorInfo, type ErrorValue } from "../../shared/errors";
+type ContextValue = { project: FileProject; shown: boolean; width: number; error: ErrorValue; toggle: () => void; hide: () => void; setWidth: (value: number) => void;
   clearError: () => void; openFile: (cwd: string, path: string) => Promise<void>; select: (path: string) => void; close: (path: string) => void;
   refresh: (file: FileInfo, force?: boolean) => Promise<void>; refreshTree: () => void };
 const Context = createContext<ContextValue | null>(null);
@@ -12,12 +13,12 @@ export function FileProvider({ children }: { children: ReactNode }) {
   const { state: chat, home, subscribeRecords } = useChat();
   const [state, dispatch] = useReducer(fileReducer, undefined, () => readFileTabs(sessionStorage));
   const [layout, setLayout] = useState(() => { try { const value = JSON.parse(localStorage.getItem("pi-desk.file-layout") ?? "{}"); return { shown: !matchMedia("(max-width:1100px)").matches && value.shown !== false, width: Math.max(280, Math.min(720, Number(value.width) || 430)) }; } catch { return { shown: !matchMedia("(max-width:1100px)").matches, width: 430 }; } });
-  const [error, setError] = useState("");
+  const [error, setError] = useState<ErrorValue>("");
   const seen = useRef(new Set<string>());
   const current = useRef({ state, chat }); current.current = { state, chat };
   const refresh = useCallback(async (file: FileInfo, force = true) => {
     try { const latest = await fileInfo(file.cwd, file.path); dispatch({ type: "refresh", file: latest, force }); setError(""); }
-    catch (error) { setError((error as Error).message); }
+    catch (error) { setError(errorInfo(error)); }
   }, []);
   useEffect(() => { try { sessionStorage.setItem("pi-desk.file-tabs", JSON.stringify(state)); } catch {} }, [state]);
   useEffect(() => { try { localStorage.setItem("pi-desk.file-layout", JSON.stringify(layout)); } catch {} }, [layout]);
@@ -66,7 +67,7 @@ export function FileProvider({ children }: { children: ReactNode }) {
   async function openFile(cwd: string, path: string) {
     setError("");
     try { const file = await fileInfo(cwd, path === "~" ? home : path.startsWith("~/") ? `${home}/${path.slice(2)}` : path); dispatch({ type: "open", file }); setLayout((value) => ({ ...value, shown: true })); }
-    catch (error) { setError((error as Error).message); setLayout((value) => ({ ...value, shown: true })); }
+    catch (error) { setError(errorInfo(error)); setLayout((value) => ({ ...value, shown: true })); }
   }
   return <Context.Provider value={{ project, shown: layout.shown, width: layout.width, error, openFile, refresh,
     toggle: () => setLayout((value) => ({ ...value, shown: !value.shown })), hide: () => setLayout((value) => ({ ...value, shown: false })),

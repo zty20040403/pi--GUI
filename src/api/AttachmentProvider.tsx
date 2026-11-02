@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useChat } from "./ChatProvider";
+import { errorInfo, type ErrorValue } from "../../shared/errors";
 import { MAX_ATTACHMENTS, MAX_UPLOAD, attachmentScope, shortPath, uploadFile, type Attachment } from "./attachments";
 const STORAGE = "pi-desk.attachments";
 type Groups = Record<string, Attachment[]>;
@@ -10,14 +11,14 @@ function restored(): Groups {
     return groups;
   } catch { return {}; }
 }
-type ContextValue = { items: Attachment[]; error: string; addFiles: (files: File[]) => void; addPath: (cwd: string, path: string, name: string) => void;
+type ContextValue = { items: Attachment[]; error: ErrorValue; addFiles: (files: File[]) => void; addPath: (cwd: string, path: string, name: string) => void;
   remove: (id: string) => void; submitted: (scope: string, ids: string[]) => void; clearError: () => void; reportError: (error: string) => void; scope: string };
 const Context = createContext<ContextValue | null>(null);
 export function useAttachments() { const value = useContext(Context); if (!value) throw new Error("缺少 AttachmentProvider"); return value; }
 export function AttachmentProvider({ children }: { children: ReactNode }) {
   const { state: chat } = useChat(); const selected = useRef(chat); selected.current = chat;
   const [groups, setGroups] = useState(restored); const current = useRef(groups); current.current = groups;
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, ErrorValue>>({});
   const controllers = useRef(new Map<string, AbortController>()); const urls = useRef(new Map<string, string>());
   const active = useRef(true); const scope = attachmentScope(chat.cwd, chat.session.sessionId);
   const change = useCallback((fn: (value: Groups) => Groups) => { const next = fn(current.current); current.current = next; setGroups(next); }, []);
@@ -43,7 +44,8 @@ export function AttachmentProvider({ children }: { children: ReactNode }) {
         change((rows) => ({ ...rows, [origin]: (rows[origin] ?? []).map((item) => item.id === id ? { ...item, ...result, status: "ready" } : item) }));
       }, (error: Error) => {
         if (!active.current || abort.signal.aborted) return;
-        change((rows) => ({ ...rows, [origin]: (rows[origin] ?? []).map((item) => item.id === id ? { ...item, status: "error", error: error.message } : item) }));
+        const info = errorInfo(error); setErrors((rows) => ({ ...rows, [origin]: info }));
+        change((rows) => ({ ...rows, [origin]: (rows[origin] ?? []).map((item) => item.id === id ? { ...item, status: "error", error: info.message } : item) }));
       }).finally(() => { controllers.current.delete(id); });
     }
   }, [change]);

@@ -1,4 +1,5 @@
 import { TOKEN_KEY } from "./storage";
+import { DeskError } from "../../shared/errors";
 export const MAX_UPLOAD = 50 * 1024 * 1024;
 export const MAX_ATTACHMENTS = 12;
 export const PATH_DRAG_TYPE = "application/x-pi-desk-path";
@@ -16,6 +17,6 @@ export function treeDrag(raw: string, cwd: string): { cwd: string; path: string;
 export async function uploadFile(cwd: string, file: File, signal: AbortSignal): Promise<UploadedFile> {
   if (file.size > MAX_UPLOAD) throw new Error("单个文件不能超过 50 MB");
   const response = await fetch(`/api/upload?${new URLSearchParams({ cwd, name: file.name || "clipboard.png" })}`, { method: "POST", headers: { Authorization: `Bearer ${sessionStorage.getItem(TOKEN_KEY) ?? ""}` }, body: file, signal });
-  if (!response.ok) { let detail: string | undefined; try { detail = (await response.json()).error; } catch {} throw new Error(detail ?? `上传失败（${response.status}）`); }
+  if (!response.ok) { let detail: { error?: string; errorDetails?: string } = {}; try { detail = await response.json(); } catch {} throw new DeskError({ message: detail.error ?? `上传失败（${response.status}）`, details: detail.errorDetails }); }
   return response.json();
 }

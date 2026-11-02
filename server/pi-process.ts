@@ -7,7 +7,7 @@ import { delimiter } from "node:path";
 export type RpcRecord = { type: string; id?: string; [key: string]: unknown };
 export const RPC_SEQUENCE = Symbol("desk sequence");
 export const sequenceOf = (record: RpcRecord): number => (record as RpcRecord & { [RPC_SEQUENCE]?: number })[RPC_SEQUENCE] ?? 0;
-export type PiProcessOptions = { binary?: string; args?: string[]; requestTimeoutMs?: number };
+export type PiProcessOptions = { binary?: string; args?: string[]; requestTimeoutMs?: number; env?: NodeJS.ProcessEnv };
 type Pending = { resolve: (record: RpcRecord) => void; reject: (error: Error) => void; timer: NodeJS.Timeout };
 // npm/tsx 会把开发 SDK 的同名 pi 放到 PATH 最前面；发动机必须仍用用户安装的 pi。
 export function piEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
@@ -34,7 +34,7 @@ export class PiProcess extends EventEmitter {
     this.requestTimeoutMs = options.requestTimeoutMs ?? 120_000;
     this.child = spawn(options.binary ?? process.env.PI_BIN ?? "pi", [...(options.args ?? []), "--mode", "rpc"], {
       cwd,
-      env: piEnvironment(),
+      env: piEnvironment({ ...process.env, ...options.env }),
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.closed = new Promise((resolve) => this.child.once("close", () => resolve()));

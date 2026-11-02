@@ -11,5 +11,10 @@ export default function uiFixture(pi: ExtensionAPI) {
     ctx.ui.setStatus("fixture-ui", "FIXTURE STATUS"); ctx.ui.setWidget("fixture-above", ["ABOVE EDITOR FIXTURE", "第二行"]); ctx.ui.setWidget("fixture-below", ["BELOW EDITOR FIXTURE"], { placement: "belowEditor" });
     ctx.ui.setTitle("FIXTURE WINDOW TITLE"); ctx.ui.setEditorText("FIXTURE PREFILL");
   } });
+  pi.registerCommand("desk-test-notices", { description: "UI verification notice fingerprints", handler: async (args, ctx) => {
+    const index = /^\d+$/.test(args) ? args : "1";
+    ctx.ui.notify(`ccstyle: write 工具已被 /synthetic/${index}/render.ts 占用，富 diff 已让位`, "warning");
+    ctx.ui.notify(`notice-fixture: 已检查 /synthetic/project-${index}/file.ts 的 ${index} 项`, "warning");
+  } });
   pi.registerCommand("desk-test-clear", { description: "UI verification clear", handler: async (_args, ctx) => { ctx.ui.setStatus("fixture-ui", undefined); ctx.ui.setWidget("fixture-above", undefined); ctx.ui.setWidget("fixture-below", undefined); } });
 }

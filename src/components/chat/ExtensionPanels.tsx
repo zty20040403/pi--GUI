@@ -3,6 +3,7 @@ import { useChat } from "../../api/ChatProvider";
 import { useExtensionUi } from "../../api/ExtensionUiProvider";
 import { useGoals } from "../../api/GoalProvider";
 import { Markdown } from "./Markdown";
+import { ErrorContent } from "../ui/ErrorContent";
 export function TodoPanel() {
   const { state } = useChat(); const tasks = state.todo?.tasks.filter((task) => task.status !== "deleted") ?? [];
   if (!tasks.length) return null;
@@ -20,7 +21,7 @@ export function GoalPanel() {
   const { goals, error } = useGoals(); const { state } = useChat();
   if (!goals.length && !error) return null;
   return <details className="extension-panel goal-panel" data-testid="goal-panel"><summary><ChevronRight size={12} className="chevron" aria-hidden /><Target size={14} aria-hidden /><strong>项目目标</strong><span>{goals.length ? `${goals.length} 个记录 · 从项目目标文件读取` : "无法读取目标记录"}</span></summary>
-    {error && <p className="error-text">{error}</p>}{goals.map((goal) => <section key={goal.id}><div className="goal-progress-meta"><strong>{statusLabel[goal.status] || goal.status}{state.focusedGoalId === goal.id ? " · 当前焦点" : ""}</strong><span>{Math.floor(goal.seconds / 60)} 分钟 · {goal.tokens.toLocaleString()} tokens</span></div><Markdown text={goal.objective} />
+    {error && <div className="error-text"><ErrorContent error={error} /></div>}{goals.map((goal) => <section key={goal.id}><div className="goal-progress-meta"><strong>{statusLabel[goal.status] || goal.status}{state.focusedGoalId === goal.id ? " · 当前焦点" : ""}</strong><span>{Math.floor(goal.seconds / 60)} 分钟 · {goal.tokens.toLocaleString()} tokens</span></div><Markdown text={goal.objective} />
       {goal.tasks.length > 0 && <ul>{goal.tasks.map((task) => <li key={task.id}><span className={`task-check ${["complete", "completed"].includes(task.status) ? "done" : ""}`}>{["complete", "completed"].includes(task.status) ? <Check size={13} /> : <Circle size={11} />}</span><div><strong>{task.title}</strong><small>{statusLabel[task.status] || task.status}</small></div></li>)}</ul>}</section>)}
   </details>;
 }

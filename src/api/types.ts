@@ -13,7 +13,7 @@ export type Block = {
 export type Message = {
   role: string; timestamp: number; content?: string | Block[]; stopReason?: string;
   toolCallId?: string; toolName?: string; isError?: boolean; display?: boolean;
-  errorMessage?: string; model?: string; provider?: string; thinkingLevel?: string;
+  errorMessage?: string; errorMessageDetails?: string; model?: string; provider?: string; thinkingLevel?: string;
   command?: string; output?: string; summary?: string; details?: WireRecord;
 };
 export type ChatMessage = Message & { key: string; thinkingStarted?: number; thinkingMs?: number };
@@ -31,11 +31,11 @@ export type Stats = {
 };
 export type Command = { name: string; description?: string; source?: string };
 export type Opened = {
-  op: "opened"; cwd: string; state: SessionState; messages: Message[]; stats: Stats; models: Model[]; commands: Command[]; seq?: number; ui?: UiSnapshot; extensions?: ExtensionSessionState;
+  op: "opened"; cwd: string; state: SessionState; messages: Message[]; stats: Stats; models: Model[]; commands: Command[]; seq?: number; ui?: UiSnapshot; extensions?: ExtensionSessionState; sync?: { sessionPath: string; externalChanged: boolean };
 };
-export type SessionSummary = { path: string; id: string; cwd: string; title: string; name?: string; mtime: number; virtual?: boolean };
+export type SessionSummary = { path: string; id: string; cwd: string; originalCwd?: string; title: string; name?: string; mtime: number; virtual?: boolean };
 export type Project = { cwd: string; sessions: SessionSummary[]; missing?: true };
 export type Activity = { cwd: string; sessionPath?: string; busy: boolean };
 export type RecentProject = { cwd: string; openedAt: number };
-export type Target = { cwd: string; sessionPath?: string };
+export type Target = { cwd: string; sessionPath?: string; reload?: boolean };
 export type Connection = "connecting" | "opening" | "ready" | "reconnecting" | "offline";

@@ -1,16 +1,17 @@
 import { todoSnapshot, type TodoSnapshot } from "../../shared/extensions";
+import type { ErrorValue } from "../../shared/errors";
 import type { Block, ChatMessage, Connection, Message, Model, Opened, SessionState, Stats, Tool, WireRecord, Command } from "./types";
 
 export type ChatState = {
   cwd: string; connection: Connection; messages: ChatMessage[]; tools: Record<string, Tool>;
   activeKey?: string; session: SessionState; stats: Stats; models: Model[]; levels: string[]; commands: Command[];
   busy: boolean; compacting: boolean; waitingSince?: number; retry?: { attempt: number; maxAttempts: number };
-  error?: string; notice?: string; statuses: Record<string, string>; steering: string[]; followUp: string[];
+  error?: ErrorValue; notice?: string; externalChanged: boolean; statuses: Record<string, string>; steering: string[]; followUp: string[];
   todo?: TodoSnapshot; todoSeq: number; focusedGoalId?: string | null;
 };
 export const initialState: ChatState = {
   cwd: "", connection: "connecting", messages: [], tools: {}, session: {}, stats: {}, models: [], levels: [], commands: [],
-  busy: false, compacting: false, statuses: {}, steering: [], followUp: [], todoSeq: 0,
+  busy: false, compacting: false, externalChanged: false, statuses: {}, steering: [], followUp: [], todoSeq: 0,
 };
 export type Action =
   | { type: "connection"; value: Connection }
@@ -19,7 +20,7 @@ export type Action =
   | { type: "session"; value: SessionState }
   | { type: "stats"; value: Stats }
   | { type: "levels"; value: string[] }
-  | { type: "error"; value?: string }
+  | { type: "error"; value?: ErrorValue }
   | { type: "notice"; value?: string }
   | { type: "accepted"; disposition?: string; now: number };
 
@@ -48,7 +49,7 @@ function putMessage(state: ChatState, message: Message, complete: boolean, now: 
   const failed = complete && message.role === "assistant" && message.stopReason === "error";
   return { ...state, messages, tools: updateTools(state.tools, message),
     activeKey: message.role === "assistant" && !complete ? key : state.activeKey,
-    error: failed ? message.errorMessage ?? "模型回复失败" : state.error };
+    error: failed ? message.errorMessageDetails ? { message: message.errorMessage ?? "模型回复失败", details: message.errorMessageDetails } : message.errorMessage ?? "模型回复失败" : state.error };
 }
 
 export function reducer(state: ChatState, action: Action): ChatState {
@@ -64,7 +65,7 @@ export function reducer(state: ChatState, action: Action): ChatState {
       const value = action.value;
       let next: ChatState = { ...initialState, cwd: value.cwd, connection: "ready", session: value.state,
         models: value.models, commands: value.commands, stats: value.stats, busy: !!value.state.isStreaming,
-        compacting: !!value.state.isCompacting, statuses: value.ui?.statuses ?? (state.cwd === value.cwd ? state.statuses : {}),
+        compacting: !!value.state.isCompacting, externalChanged: !!value.sync?.externalChanged, statuses: value.ui?.statuses ?? (state.cwd === value.cwd ? state.statuses : {}),
         waitingSince: value.state.isStreaming ? Date.now() : undefined };
       let history: TodoSnapshot | undefined;
       for (const message of value.messages) {
@@ -123,13 +124,14 @@ export function reducer(state: ChatState, action: Action): ChatState {
       const todo = event.type === "tool_execution_end" && tool.name === "todo" && (action.seq === undefined || action.seq > state.todoSeq) ? todoSnapshot(tool.result?.details) : undefined;
       return { ...state, tools: { ...state.tools, [tool.id]: tool }, waitingSince: undefined, ...(todo ? { todo, todoSeq: action.seq ?? state.todoSeq } : {}) };
     }
+    case "desk_session_sync": return event.sessionPath === state.session.sessionFile ? { ...state, externalChanged: !!event.externalChanged } : state;
     case "queue_update": return { ...state, steering: event.steering ?? [], followUp: event.followUp ?? [] };
     case "session_info_changed": return { ...state, session: { ...state.session, sessionName: event.name } };
     case "thinking_level_changed": return { ...state, session: { ...state.session, thinkingLevel: event.level } };
     case "compaction_start": return { ...state, compacting: true };
-    case "compaction_end": return { ...state, compacting: false, error: event.errorMessage ?? state.error };
+    case "compaction_end": return { ...state, compacting: false, error: event.errorMessageDetails ? { message: event.errorMessage, details: event.errorMessageDetails } : event.errorMessage ?? state.error };
     case "auto_retry_start": return { ...state, retry: { attempt: event.attempt, maxAttempts: event.maxAttempts }, waitingSince: now };
-    case "auto_retry_end": return { ...state, retry: undefined, error: event.success ? undefined : event.finalError ?? "重试失败" };
+    case "auto_retry_end": return { ...state, retry: undefined, error: event.success ? undefined : event.finalErrorDetails ? { message: event.finalError, details: event.finalErrorDetails } : event.finalError ?? "重试失败" };
     case "extension_error": return { ...state, notice: `插件报错：${event.error ?? "未知错误"}` };
     case "extension_ui_request":
       if (event.method === "setStatus") {

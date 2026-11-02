@@ -5,14 +5,16 @@ import { PATH_DRAG_TYPE, shortPath } from "../../api/attachments";
 import { useFiles } from "../../api/FileProvider";
 import { fileTree, type TreeEntry, type TreeResult } from "../../api/files";
 import { fileIcon } from "./fileIcon";
+import { ErrorContent } from "../ui/ErrorContent";
+import { errorInfo, type ErrorValue } from "../../../shared/errors";
 function Directory({ cwd, dir, depth }: { cwd: string; dir: string; depth: number }) {
-  const { project } = useFiles(); const [data, setData] = useState<TreeResult>(); const [error, setError] = useState("");
+  const { project } = useFiles(); const [data, setData] = useState<TreeResult>(); const [error, setError] = useState<ErrorValue>("");
   useEffect(() => {
     const abort = new AbortController(); setError("");
-    void fileTree(cwd, dir, abort.signal).then(setData, (error: Error) => { if (!abort.signal.aborted) setError(error.message); });
+    void fileTree(cwd, dir, abort.signal).then(setData, (error: Error) => { if (!abort.signal.aborted) setError(errorInfo(error)); });
     return () => abort.abort();
   }, [cwd, dir, project.treeVersion]);
-  if (error) return <p className="preview-notice error-text" role="alert">{error}</p>;
+  if (error) return <div className="preview-notice error-text" role="alert"><ErrorContent error={error} /></div>;
   if (!data) return <p className="tree-empty" style={{ paddingLeft: 14 + depth * 14 }}>正在读取…</p>;
   return <ul role="group" className="tree-group">{data.entries.map((entry) => <Entry key={`${entry.name}:${entry.path}`} cwd={cwd} entry={entry} depth={depth} />)}
     {!data.entries.length && <li className="tree-empty" style={{ paddingLeft: 14 + depth * 14 }}>空文件夹</li>}{data.truncated && <li className="tree-empty">目录超过 5000 项，只显示前 5000 项。</li>}

@@ -1,4 +1,5 @@
 import { TOKEN_KEY } from "./storage";
+import { DeskError } from "../../shared/errors";
 import { desktopBridge } from "./desktop";
 export const TEXT_LIMIT = 1024 * 1024;
 export type FileInfo = { cwd: string; path: string; name: string; size: number; mtime: number; mime: string; binary: boolean; tooLarge: boolean };
@@ -29,9 +30,9 @@ export function authHeaders() {
 export async function fileRequest(url: string, options: RequestInit = {}) {
   const response = await fetch(url, { ...options, headers: { ...authHeaders(), ...options.headers } });
   if (!response.ok) {
-    let message = `文件请求失败（${response.status}）`;
-    try { message = (await response.json()).error ?? message; } catch {}
-    throw new Error(response.status === 401 ? "口令失效，请用后台本次打印的网址重新打开" : message);
+    let detail: { error?: string; errorDetails?: string } = {};
+    try { detail = await response.json(); } catch {}
+    throw new DeskError({ message: response.status === 401 ? "口令失效，请用后台本次打印的网址重新打开" : detail.error ?? `文件请求失败（${response.status}）`, details: detail.errorDetails });
   }
   return response;
 }

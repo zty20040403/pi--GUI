@@ -1,12 +1,13 @@
 import { lstat, open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { HttpError } from "./http.js";
+import { mappedCwd, type ProjectMappings } from "../shared/project-mapping.js";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 
 // pi 把对话存在 ~/.pi/agent/sessions/<文件夹>/<时间>_<id>.jsonl，第一行是带 cwd 的会话头。
 export const SESSIONS_DIR = process.env.PI_SESSIONS_DIR ?? join(homedir(), ".pi/agent/sessions");
 
-export type SessionSummary = { path: string; id: string; cwd: string; title: string; name?: string; mtime: number };
+export type SessionSummary = { path: string; id: string; cwd: string; originalCwd?: string; title: string; name?: string; mtime: number };
 export type Project = { cwd: string; sessions: SessionSummary[]; missing?: true };
 
 const cache = new Map<string, { mtime: number; summary: SessionSummary | null }>();
@@ -49,7 +50,7 @@ async function summarize(path: string, mtime: number): Promise<SessionSummary | 
   return summary;
 }
 
-export async function listProjects(sessionsDir = SESSIONS_DIR): Promise<Project[]> {
+export async function listProjects(sessionsDir = SESSIONS_DIR, mappings: ProjectMappings = {}): Promise<Project[]> {
   const byCwd = new Map<string, SessionSummary[]>();
   let dirs: string[] = [];
   try {
@@ -70,11 +71,15 @@ export async function listProjects(sessionsDir = SESSIONS_DIR): Promise<Project[
       try {
         const info = await stat(path);
         if (!info.isFile()) continue;
-        const summary = await summarize(path, info.mtimeMs);
-        if (!summary) continue;
-        const list = byCwd.get(summary.cwd) ?? [];
+        if (info.size > 50 * 1024 * 1024) continue;
+        const raw = await summarize(path, info.mtimeMs);
+        if (!raw) continue;
+        let cwd = mappedCwd(raw.cwd, mappings);
+        if (cwd !== raw.cwd) { try { cwd = await realpath(cwd); } catch {} }
+        const summary = cwd === raw.cwd ? raw : { ...raw, cwd, originalCwd: raw.cwd };
+        const list = byCwd.get(cwd) ?? [];
         list.push(summary);
-        byCwd.set(summary.cwd, list);
+        byCwd.set(cwd, list);
       } catch {} // 文件可能被终端移走，不能让整个列表返回 500。
     }
   }
@@ -117,8 +122,8 @@ export async function savedSession(sessionPath: unknown, sessionsDir = SESSIONS_
 export function invalidateSession(path: string) { cache.delete(path); }
 
 // 打开时还要确认属于此项目；不把其他文件当对话读。
-export async function checkSessionPath(cwd: string, sessionPath: string, sessionsDir = SESSIONS_DIR): Promise<string> {
+export async function checkSessionPath(cwd: string, sessionPath: string, sessionsDir = SESSIONS_DIR, mappings: ProjectMappings = {}): Promise<string> {
   const session = await savedSession(sessionPath, sessionsDir);
-  if (await realpath(session.cwd) !== cwd) throw new HttpError(400, "这个对话不属于所选项目");
+  if (await realpath(mappedCwd(session.cwd, mappings)) !== cwd) throw new HttpError(400, "这个对话不属于所选项目");
   return session.path;
 }

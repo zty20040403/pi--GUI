@@ -6,6 +6,7 @@ import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
 import { MessageImage } from "./MessageImage";
 import { PREFILL_EVENT } from "./Composer";
+import { ErrorContent } from "../ui/ErrorContent";
 
 const SUGGESTIONS = [
   { icon: ListTree, text: "介绍一下这个项目的结构和主要文件" },
@@ -67,7 +68,7 @@ export function Messages() {
         {message.role === "bashExecution" && <pre>{message.command}{"\n"}{message.output}</pre>}
         {message.summary && <details className="thinking"><summary><ChevronRight size={12} className="chevron" aria-hidden />上下文摘要</summary><Markdown text={message.summary} /></details>}
         {message.stopReason === "aborted" && <p className="message-aborted">已停止这次回复</p>}
-        {message.errorMessage && message.stopReason !== "aborted" && <p className="message-error"><CircleAlert size={14} aria-hidden style={{ marginTop: 2 }} /><span className="error-text">{message.errorMessage}</span></p>}
+        {message.errorMessage && message.stopReason !== "aborted" && <div className="message-error"><CircleAlert size={14} aria-hidden style={{ marginTop: 2 }} /><ErrorContent error={{ message: message.errorMessage, details: message.errorMessageDetails }} /></div>}
       </article>;
     })}
     {Object.values(state.tools).filter((tool) => !referenced.has(tool.id)).map((tool) => <ToolCard key={tool.id} tool={tool} />)}

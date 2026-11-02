@@ -2,11 +2,12 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import type { GoalSummary } from "../../shared/extensions";
 import { useChat } from "./ChatProvider";
 import { fileRequest } from "./files";
-type ContextValue = { goals: GoalSummary[]; error: string; pausing: boolean; pause: () => Promise<void> };
+import { errorInfo, type ErrorValue } from "../../shared/errors";
+type ContextValue = { goals: GoalSummary[]; error: ErrorValue; pausing: boolean; pause: () => Promise<void> };
 const Context = createContext<ContextValue | null>(null);
 export function useGoals() { const value = useContext(Context); if (!value) throw new Error("缺少 GoalProvider"); return value; }
 export function GoalProvider({ children }: { children: ReactNode }) {
-  const { state, send } = useChat(); const [data, setData] = useState<{ cwd: string; goals: GoalSummary[]; error: string }>({ cwd: "", goals: [], error: "" });
+  const { state, send } = useChat(); const [data, setData] = useState<{ cwd: string; goals: GoalSummary[]; error: ErrorValue }>({ cwd: "", goals: [], error: "" });
   const [pausing, setPausing] = useState(false); const refresh = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     if (!state.cwd || state.connection !== "ready") return;
@@ -14,7 +15,7 @@ export function GoalProvider({ children }: { children: ReactNode }) {
     const load = async () => {
       if (loading || abort.signal.aborted) return; loading = true;
       try { const response = await fileRequest(`/api/goals?${new URLSearchParams({ cwd })}`, { signal: abort.signal }); const result = await response.json(); if (!abort.signal.aborted) setData({ cwd, goals: result.goals, error: "" }); }
-      catch (error) { if (!abort.signal.aborted) setData({ cwd, goals: [], error: (error as Error).message }); }
+      catch (error) { if (!abort.signal.aborted) setData({ cwd, goals: [], error: errorInfo(error) }); }
       finally { loading = false; }
     };
     refresh.current = load; void load(); const timer = setInterval(() => { if (document.visibilityState === "visible") void load(); }, 2500);

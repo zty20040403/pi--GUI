@@ -12,7 +12,8 @@ function Pill({ icon, label, title, tone, children }: { icon: ReactNode; label: 
   return <label className="pill" title={title} data-tone={tone}>{icon}<span className="pill-label">{label}</span><ChevronDown size={12} className="pill-chevron" aria-hidden />{children}</label>;
 }
 
-export function ModelBar({ onError }: { onError: (message: string) => void }) {
+import { errorInfo, type ErrorValue } from "../../../shared/errors";
+export function ModelBar({ onError }: { onError: (message: ErrorValue) => void }) {
   const { state, switching, changeModel, changeThinking, send } = useChat();
   const ui = useExtensionUi();
   const [changing, setChanging] = useState(false);
@@ -20,7 +21,7 @@ export function ModelBar({ onError }: { onError: (message: string) => void }) {
   const disabled = changing || switching || state.busy || state.compacting || state.connection !== "ready";
   async function configure(action: () => Promise<void>) {
     setChanging(true); onError("");
-    try { await action(); } catch (error) { onError((error as Error).message); } finally { setChanging(false); }
+    try { await action(); } catch (error) { onError(errorInfo(error)); } finally { setChanging(false); }
   }
   const model = state.session.model;
   const current = model ? state.models.find((item) => item.provider === model.provider && item.id === model.id) : undefined;

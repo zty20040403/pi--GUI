@@ -2,7 +2,7 @@
 
 Kenneth 的 pi 图形客户端，底层遥控本机现有的 pi。完整方案见 [`PLAN.md`](PLAN.md)，开发规矩见 [`AGENTS.md`](AGENTS.md)。
 
-**当前进度：第一版六个阶段已完成。Mac 应用通过实际启动/聊天验收；Windows SSH 远程使用由 Kenneth 在真机操作并反馈收到回复。三栏界面、对话管理、文件预览、附件、插件弹窗和三档工具权限均已实现。**
+**当前进度：第一版六个阶段及第二版第 7 阶段已完成。** 新增终端对话实时同步、外部修改保护、失效项目重新指定、中文错误详情及插件提醒隐藏/恢复。第二版后续工作见 [`PLAN-v2.md`](PLAN-v2.md)。Mac 应用通过实际启动/聊天验收；Windows SSH 远程使用曾由 Kenneth 在真机确认，Windows 本地版尚未实现。
 
 ## 怎么打开试
 
@@ -33,6 +33,16 @@ npm run dev
 正在回复的对话会转圈。同一个项目正在回复时不能切到它的另一段对话或新建；可以切到另一个项目，原项目继续回复。删除正在回复的对话需要先停止。
 
 输入框底部的“权限”胶囊默认是**自动**：普通项目文件修改和安全查看命令可以直接执行；项目外修改、敏感文件和其他命令会弹窗问你。危险命令标红，默认聚焦“拒绝”。**审批不是操作系统沙箱**，仍只应在可信项目使用。不要把启动网址发给别人，它相当于本地后台的口令。
+
+## 同步、文件夹搬家与提醒
+
+- **终端和 App 共用列表**：终端新建、改名或删除对话，左栏会自动更新，一般几秒内出现；文件监听不可用时，每 15 秒刷新作为后备。
+- **同一对话不要两边一起写**：终端给当前对话加了消息，App 会显示黄色提示并禁止发送。点击“重新载入”后能看见终端的新消息，再继续聊；未发送草稿保留。检测和发送前检查都在后台，不只禁用按钮。
+- **文件夹被移动/删除**：左栏显示“文件夹已不存在”；点对话会看到说明卡片，可以“重新指定文件夹”或把“这些对话”一起移到废纸篓。重新指定只保存在 App 的位置映射里，原对话文件头不改；App 内的实际工作目录会使用新位置。**终端仍使用原目录**，这不是迁移 pi 的全局配置。
+- **中文错误**：常见的文件不存在、无权限、端口占用、pi 退出、网络失败、服务凭据被拒绝都有中文说明；原始报错在“详情”里，连接地址和凭据隐藏。pi 退出后点“重新连接”，不会自动重发消息。
+- **不再提示这类**：插件通知右上角可隐藏同类提醒；左栏底部齿轮“设置”→“已隐藏的提醒”可以恢复。指纹包含插件名，路径和数字变化不会再弹。ccstyle 的无效 write 占用提醒默认隐藏；权限审批、提问弹窗和聊天错误不受影响。
+
+这些 App 设置保存在 `~/.pi-desk/settings.json`，不会写入 pi 的模型、插件或 CortexKit 配置。测试可以用 `PI_DESK_DATA_DIR` 或 `PI_DESK_APP_SETTINGS_FILE` 指定隔离位置。
 
 ## 界面和快捷键
 
@@ -179,7 +189,7 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:4317:127.0.0.1:4317 kenneth@alex
 
 ```bash
 npm run typecheck       # 后台、前端、脚本和 Vite 配置的 TypeScript
-npm test                # 不调用模型：46 组自动测试（含真实 pi 的权限命令）
+npm test                # 不调用模型：57 组自动测试（含真实 pi 权限/目录映射）
 npm run build           # 构建真实聊天网页
 npm run verify:phase1   # 后台完整验收，包含一次真实模型请求
 npm run verify:phase2   # 真实 Chrome 聊天页 + 终端 pi -r + 生产页面验收
@@ -191,7 +201,8 @@ npx tsx scripts/verify-permissions.ts # 真 pi 工具流水线 105 条；危险�
 npm run fixtures        # 重新生成完全合成的测试文件（不读取私人文件）
 npm run test:desktop    # 4 组桌面专用安全/配置测试，无模型调用
 npm run desktop:build   # 网页、后台打包和未签名的 Mac arm64 应用
-npm run verify:phase6   # Mac 必要验收；Windows 仍需人工真机确认
+npm run verify:phase6   # Mac 必要验收；不自动验证 Windows
+npm run verify:phase7   # 真实终端同步 + 失效项目/故障/插件提醒 + 深浅截图
 ```
 
 先关闭其他占用 4317 / 5173 的后台。第 2–5 阶段验收使用已安装的 Google Chrome；终端恢复检查还使用 Python 3。Playwright 已固定为开发依赖，不需要下载额外浏览器。日常使用网页不需要 Playwright 或 Python。
@@ -200,7 +211,7 @@ npm run verify:phase6   # Mac 必要验收；Windows 仍需人工真机确认
 
 测试创建临时项目和测试对话，结束时只用 `trash` 把它们移到废纸篓，不动你已有的对话。截图存到忽略提交的 `.pi-desk/verification/`，不会提交口令或私人对话。
 
-具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)、[`第 5 阶段`](docs/phase-5-verification.md)、[`第 6 阶段`](docs/phase-6-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
+具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)、[`第 5 阶段`](docs/phase-5-verification.md)、[`第 6 阶段`](docs/phase-6-verification.md)、[`第 7 阶段`](docs/phase-7-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
 
 ## 后台协议（给后续开发用）
 
@@ -208,9 +219,11 @@ npm run verify:phase6   # Mac 必要验收；Windows 仍需人工真机确认
 
 | 请求 | 返回 |
 |---|---|
-| `GET /api/health` | `{ok: true, phase: 6, processes: 数量}` |
+| `GET /api/health` | `{ok: true, phase: 7, processes: 数量}` |
 | `GET /api/workspace` | `{cwd: 后台项目根目录, home: 家目录}` |
 | `GET /api/projects` | `{projects: [{cwd, sessions: [{path, id, cwd, title, name?, mtime}]}], activity: [{cwd, sessionPath?, busy}]}` |
+| `POST /api/projects/relocate` | JSON `{cwd,path}`，仅为失效项目设置 App 映射，实际 pi runtime 使用新 cwd |
+| `GET /api/notices` / `POST /api/notices` | 读取已隐藏的类型；写入 `{id,hidden}`，只能操作后台识别过的通知指纹 |
 | `POST /api/check-dir` | JSON `{path}` → `{cwd}`，检查并 realpath，不创建目录 |
 | `POST /api/sessions/delete` | JSON `{path}` → `{ok:true}`，校验普通 pi 会话文件，空闲活动进程先关闭，再 `trash` |
 | `GET /api/tree?cwd=&dir=` | 一层目录，目录在前，过滤隐藏/敏感/越界链接，超过 5000 项提示 |
@@ -231,7 +244,10 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 // prompt 可附 attachments: [{kind:"upload"|"path", path}]，后台校验并组装图片/路径
 
 // 后台 → 客户端
-{ op: "opened", cwd, state, messages, stats, models, commands, seq, ui, extensions }
+{ op: "opened", cwd, state, messages, stats, models, commands, seq, ui, extensions, sync }
+{ op: "projects_changed" }
+{ op: "session_sync", cwd, state: {sessionPath, externalChanged} }
+{ op: "notice_preferences", hidden: [{id, plugin, pattern, builtin?}] }
 { op: "ui_states", states: [{cwd, state: uiSnapshot}] }
 { op: "ui_state", cwd, state: uiSnapshot }
 { op: "ui_resolved", cwd, id, reason }
@@ -239,7 +255,7 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 { op: "event", cwd, record, seq, sessionPath? }
 { op: "session_deleted", cwd, sessionPath }
 { op: "exit", cwd, reason }
-{ op: "error", cwd?, reqId?, message }
+{ op: "error", cwd?, reqId?, message, details? }
 ```
 
 `seq` 是当前 pi 进程 stdout 的顺序号；`opened.seq` 对应历史消息快照的响应位置，前端据此避免重复拼接缓冲的流式增量。它不写入 pi 的对话文件。UI 快照带截取位置的顺序号，与历史消息快照的边界独立，旧状态不能覆盖最新快照。任务恢复使用 `get_entries`/`leafId` 沿 parentId 找当前分支，优先用 `rpiv-todo-state`，兼容不进入消息历史的嵌套 todo；完整会话条目不转发给网页。回答须匹配当前题目的 id/类型/选项，带 reqId 时等写入 pi 后返回 rpc_result；拒绝未知、重复或过期回答。
@@ -257,6 +273,7 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 ## 常见问题和已知限制
 
 - **端口占用 / EADDRINUSE**：在之前启动的终端按 `Ctrl+C`；不要同时运行开发和生产后台。确实要同时再开一份（比如改界面时不想停掉正在用的那份），可以 `PI_DESK_PORT=4327 npm run dev`，打开它打印的 4327 网址。自动测试仍固定用 4317，跑测试前要先停掉 4317 上的后台。
+- **同步不是多人协作锁**：会在检测到外部改动后禁止发送，但不能锁住终端的 pi；仍建议同一对话只在一边发送。没有实现可选的 lsof“终端正在打开”探测。
 - **页面连接不上**：确认后台终端还开着。如果重启过，用本次打印的新网址；不要公开保存真实口令。
 - **找不到 pi**：先在同一个终端运行 `pi --version`；必要时用 `PI_BIN=/pi/可执行文件的绝对路径 npm run dev` 指定路径。
 - **找不到模型 / 请求报错**：先在终端 pi 里确认 `cliproxy/gpt-6-luna` 能用。本项目不替你改模型配置；新对话按 pi 的默认配置，新建后请重新确认模型和推理档位。

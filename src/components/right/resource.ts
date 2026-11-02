@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { fileBlob, type PreviewProps } from "../../api/files";
+import { errorInfo, type ErrorValue } from "../../../shared/errors";
 export function useResource({ file, version }: PreviewProps, text = false, api = "file") {
-  const [resource, setResource] = useState<{ data?: Blob; error?: string }>({});
+  const [resource, setResource] = useState<{ data?: Blob; error?: ErrorValue }>({});
   useEffect(() => {
     const abort = new AbortController(); let active = true; setResource({});
-    void fileBlob(file, abort.signal, api, text).then((data) => { if (active) setResource({ data }); }, (error: Error) => { if (active && !abort.signal.aborted) setResource({ error: error.message }); });
+    void fileBlob(file, abort.signal, api, text).then((data) => { if (active) setResource({ data }); }, (error: Error) => { if (active && !abort.signal.aborted) setResource({ error: errorInfo(error) }); });
     return () => { active = false; abort.abort(); };
   }, [file.cwd, file.path, file.mtime, file.size, version, text, api]);
   return resource;

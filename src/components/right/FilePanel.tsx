@@ -3,6 +3,8 @@ import { FolderSearch, FolderTree, RotateCw, SquareArrowOutUpRight, X } from "lu
 import { useFiles } from "../../api/FileProvider";
 import { fileSize, previewKind, systemOpen, type FileInfo, type PreviewProps } from "../../api/files";
 import { fileIcon } from "./fileIcon";
+import { ErrorContent } from "../ui/ErrorContent";
+import { errorInfo, type ErrorValue } from "../../../shared/errors";
 const FileTree = lazy(() => import("./FileTree"));
 const TextPreview = lazy(() => import("./TextPreview"));
 const ImagePreview = lazy(() => import("./ImagePreview"));
@@ -35,10 +37,10 @@ function Preview(props: PreviewProps) {
 }
 export function FilePanel() {
   const { project, shown, hide, error, clearError, select, close, refresh } = useFiles();
-  const [action, setAction] = useState(false); const [actionError, setActionError] = useState("");
+  const [action, setAction] = useState(false); const [actionError, setActionError] = useState<ErrorValue>("");
   const selected = project.tabs.find((file) => file.path === project.active);
   async function openSystem(file: FileInfo, reveal: boolean) {
-    setAction(true); setActionError(""); try { await systemOpen(file, reveal); } catch (error) { setActionError((error as Error).message); } finally { setAction(false); }
+    setAction(true); setActionError(""); try { await systemOpen(file, reveal); } catch (error) { setActionError(errorInfo(error)); } finally { setAction(false); }
   }
   return <aside className="file-panel" hidden={!shown} aria-label="文件面板">
     {shown && <><div className="file-panel-heading">
@@ -51,7 +53,7 @@ export function FilePanel() {
       </div>
       <button className="icon-button" aria-label="收起文件面板" title="收起文件面板" onClick={hide}><X size={15} /></button>
     </div>
-      {(error || actionError) && <div className="file-panel-error" role="alert"><span>{error || actionError}</span><button className="quiet-button" onClick={() => { clearError(); setActionError(""); }}>关闭</button></div>}
+      {(error || actionError) && <div className="file-panel-error" role="alert"><ErrorContent error={error || actionError} /><button className="quiet-button" onClick={() => { clearError(); setActionError(""); }}>关闭</button></div>}
       <div className="file-body"><div className="tree-panel" hidden={!!selected} role="tabpanel" aria-labelledby="file-tree-tab"><Suspense fallback={<p className="tree-empty">正在载入文件树…</p>}><FileTree /></Suspense></div>
         {selected && <div className="file-view" key={selected.path}>
           <div className="file-meta"><span title={selected.path}>&lrm;{selected.path}</span><div className="file-actions">

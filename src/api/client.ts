@@ -1,8 +1,9 @@
 import type { Connection, Opened, Target, WireRecord } from "./types";
+import { DeskError, type ErrorValue } from "../../shared/errors";
 
-type ClientEvent = { kind: "connection"; value: Connection } | { kind: "opened"; value: Opened }
+type ClientEvent = { kind: "connection"; value: Connection } | { kind: "opened"; value: Opened } | { kind: "projects_changed" }
   | { kind: "event"; cwd: string; value: WireRecord; sessionPath?: string; seq?: number }
-  | { kind: "deleted"; cwd: string; sessionPath: string; selected: boolean } | { kind: "error"; value: string };
+  | { kind: "deleted"; cwd: string; sessionPath: string; selected: boolean } | { kind: "error"; value: ErrorValue };
 type Pending = { resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 export class RpcClient {
   private socket?: WebSocket;
@@ -67,13 +68,17 @@ export class RpcClient {
         this.buffered = [];
         this.emit({ kind: "connection", value: "ready" });
         this.resolveOpen(message);
-      } else if (["ui_states", "ui_state", "ui_resolved"].includes(message.op)) {
+      } else if (message.op === "projects_changed") {
+        this.emit({ kind: "projects_changed" });
+      } else if (message.op === "session_sync") {
+        this.emit({ kind: "event", cwd: message.cwd, sessionPath: message.state?.sessionPath, value: { type: "desk_session_sync", ...message.state } });
+      } else if (["ui_states", "ui_state", "ui_resolved", "notice_preferences"].includes(message.op)) {
         this.emit({ kind: "event", cwd: message.cwd ?? "", value: { ...message, type: `desk_${message.op}` } });
       } else if (message.op === "rpc_result" || message.op === "error" && message.reqId) {
         const waiter = this.pending.get(message.reqId);
         if (!waiter) return;
         clearTimeout(waiter.timer); this.pending.delete(message.reqId);
-        if (message.op === "error" || message.response.success !== true) waiter.reject(new Error(message.message ?? message.response.error ?? "命令失败"));
+        if (message.op === "error" || message.response.success !== true) waiter.reject(new DeskError({ message: message.message ?? message.response.error ?? "命令失败", details: message.details ?? message.response?.errorDetails }));
         else waiter.resolve(message.response.data);
       } else if (message.op === "event") {
         const dialog = message.record?.type === "extension_ui_request" && ["select", "confirm", "input", "editor"].includes(message.record.method);
@@ -89,14 +94,14 @@ export class RpcClient {
         this.emit({ kind: "deleted", cwd: message.cwd, sessionPath: message.sessionPath, selected });
       } else if (message.op === "error") {
         this.buffering = false; this.buffered = [];
-        this.resolveOpen(undefined, new Error(message.message));
+        this.resolveOpen(undefined, new DeskError(message));
         if (this.lastOpened) this.target = this.lastOpened;
         this.emit({ kind: "connection", value: this.lastOpened ? "ready" : "offline" });
-        this.emit({ kind: "error", value: message.message });
+        this.emit({ kind: "error", value: { message: message.message, details: message.details } });
       } else if (message.op === "exit") {
         this.emit({ kind: "event", cwd: message.cwd, value: { type: "desk_process_exit" } });
         if (message.cwd === this.target?.cwd) {
-          this.emit({ kind: "error", value: `pi 进程已退出：${message.reason}。点击重新连接以恢复对话。` });
+          this.emit({ kind: "error", value: { message: "pi 进程已退出。已保存的对话仍在；请点击“重新连接”恢复，不会自动重发消息。", details: message.details ?? message.reason } });
           this.emit({ kind: "connection", value: "offline" });
         }
       }

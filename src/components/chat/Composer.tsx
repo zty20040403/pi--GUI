@@ -9,6 +9,8 @@ import { AttachmentBar } from "./AttachmentBar";
 import { useExtensionUi } from "../../api/ExtensionUiProvider";
 import { GoalPanel, TodoPanel, WidgetPanels } from "./ExtensionPanels";
 import { ModelBar } from "./ModelBar";
+import { ErrorContent } from "../ui/ErrorContent";
+import { errorInfo, type ErrorValue } from "../../../shared/errors";
 
 export const PREFILL_EVENT = "pi-desk:prefill";
 export function shortNumber(value: number) {
@@ -23,8 +25,8 @@ export function Composer() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [stopping, setStopping] = useState(false);
-  const [error, setError] = useState("");
-  const [configError, setConfigError] = useState("");
+  const [error, setError] = useState<ErrorValue>("");
+  const [configError, setConfigError] = useState<ErrorValue>("");
   const [selected, setSelected] = useState(0);
   const [hideCommands, setHideCommands] = useState(false);
   const lastSubmitted = useRef("");
@@ -60,7 +62,7 @@ export function Composer() {
   const ready = state.connection === "ready";
   const pendingAttachment = attachments.items.some((item) => item.status !== "ready");
   async function submit(behavior?: "steer" | "followUp", text = draft, refs = attachmentRefs(attachments.items)) {
-    if ((!text.trim() && !refs.length) || sending || !ready) return;
+    if ((!text.trim() && !refs.length) || sending || !ready || state.externalChanged) return;
     if (pendingAttachment) { setError("请等附件上传完成，或移除上传失败的附件"); return; }
     const message = text.trim() ? text : "请查看这些附件。";
     setSending(true); setError(""); lastSubmitted.current = message; lastAttachments.current = refs;
@@ -72,7 +74,7 @@ export function Composer() {
       if (origin) drafts.current.delete(origin);
       if (draftSession.current === origin) setDraft((current) => current === text ? "" : current);
       setHideCommands(false);
-    } catch (error) { setError((error as Error).message); }
+    } catch (error) { setError(errorInfo(error)); }
     finally { setSending(false); input.current?.focus(); }
   }
   async function abort() {
@@ -81,7 +83,7 @@ export function Composer() {
     try {
       const queued = await stop();
       if (queued.length) setDraft((text) => [text, ...queued].filter(Boolean).join("\n\n"));
-    } catch (error) { setError((error as Error).message); }
+    } catch (error) { setError(errorInfo(error)); }
     finally { setStopping(false); input.current?.focus(); }
   }
   useEffect(() => {
@@ -112,13 +114,13 @@ export function Composer() {
   const retryAttachments = lastSubmitted.current ? lastAttachments.current : [...retryText.matchAll(/^附件：(\.pi-desk\/uploads\/[^\n]+)$/gm)].map((match) => ({ kind: "upload" as const, path: match[1] }));
   const permission = modeFromStatus(ui.current.statuses["desk" + "-permissions"]);
   const usage = state.stats.contextUsage;
-  const canSend = ready && (!!draft.trim() || attachmentRefs(attachments.items).length > 0) && !sending && !pendingAttachment;
+  const canSend = ready && !state.externalChanged && (!!draft.trim() || attachmentRefs(attachments.items).length > 0) && !sending && !pendingAttachment;
   const statuses = Object.entries(ui.current.statuses).filter(([key]) => key !== "desk" + "-permissions");
   return <section className="composer-section">
-    {configError && <div className="composer-error" role="alert"><span>{configError}</span><button onClick={() => setConfigError("")}>关闭</button></div>}
-    {attachments.error && <div className="error-banner" role="alert"><span>{attachments.error}</span><button onClick={attachments.clearError}>关闭提示</button></div>}
-    {(error || state.error) && <div className="error-banner" role="alert"><span>{error || state.error}</span><div>
-      {retryText && <button disabled={!ready || state.busy || sending} onClick={() => { clearError(); void submit(undefined, retryText, retryAttachments); }}>重试</button>}
+    {configError && <div className="composer-error" role="alert"><ErrorContent error={configError} /><button onClick={() => setConfigError("")}>关闭</button></div>}
+    {attachments.error && <div className="error-banner" role="alert"><ErrorContent error={attachments.error} /><button onClick={attachments.clearError}>关闭提示</button></div>}
+    {(error || state.error) && <div className="error-banner" role="alert"><ErrorContent error={error || state.error} /><div>
+      {retryText && <button disabled={!ready || state.busy || sending || state.externalChanged} onClick={() => { clearError(); void submit(undefined, retryText, retryAttachments); }}>重试</button>}
       <button onClick={() => { setError(""); clearError(); }}>关闭提示</button>
     </div></div>}
     {state.notice && <p className="notice" role="status">{state.notice}</p>}

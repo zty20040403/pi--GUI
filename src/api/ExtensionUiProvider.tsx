@@ -2,10 +2,12 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { emptyUi, type UiRequest, type UiSnapshot } from "../../shared/extensions";
 import { useChat } from "./ChatProvider";
 import { applyUi, plainUi } from "./extension-ui-state";
+import { http, TOKEN_KEY } from "./storage";
+import type { HiddenNotice, NoticePreferences } from "../../shared/notices";
 export type PendingDialog = UiRequest & { cwd: string };
-type Toast = { id: string; message: string; level: "info" | "warning" | "error"; cwd: string };
+type Toast = { id: string; message: string; level: "info" | "warning" | "error"; cwd: string; fingerprint?: string; plugin?: string };
 type Groups = Record<string, UiSnapshot>;
-type ContextValue = { current: UiSnapshot; pending: PendingDialog[]; toasts: Toast[]; dismiss: (id: string) => void; answer: (dialog: PendingDialog, payload: Record<string, unknown>) => Promise<void> };
+type ContextValue = { current: UiSnapshot; pending: PendingDialog[]; toasts: Toast[]; dismiss: (id: string) => void; hidden: HiddenNotice[]; loadPreferences: () => Promise<void>; hide: (id: string) => Promise<void>; restore: (id: string) => Promise<void>; answer: (dialog: PendingDialog, payload: Record<string, unknown>) => Promise<void> };
 const Context = createContext<ContextValue | null>(null);
 export function useExtensionUi() { const value = useContext(Context); if (!value) throw new Error("缺少 ExtensionUiProvider"); return value; }
 function normalized(value: UiSnapshot): UiSnapshot {
@@ -14,10 +16,15 @@ function normalized(value: UiSnapshot): UiSnapshot {
 }
 export function ExtensionUiProvider({ children }: { children: ReactNode }) {
   const { state, subscribeRecords, answerUi } = useChat(); const [groups, setGroups] = useState<Groups>({}); const live = useRef(groups); live.current = groups;
+  const [hidden, setHidden] = useState<HiddenNotice[]>([]);
+  function preferences(value: NoticePreferences) { setHidden(value.hidden); setToasts((rows) => rows.filter((row) => !value.hidden.some((rule) => rule.id === row.fingerprint))); }
+  async function loadPreferences() { preferences(await http<NoticePreferences>("/api/notices", sessionStorage.getItem(TOKEN_KEY) ?? "")); }
+  async function changeNotice(id: string, hide: boolean) { preferences(await http<NoticePreferences>("/api/notices", sessionStorage.getItem(TOKEN_KEY) ?? "", { id, hidden: hide })); }
   const [toasts, setToasts] = useState<Toast[]>([]); const seen = useRef(new Set<string>()); const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const update = (fn: (value: Groups) => Groups) => { const next = fn(live.current); live.current = next; setGroups(next); };
   useEffect(() => {
     const unsubscribe = subscribeRecords(({ cwd, record, seq }) => {
+      if (record.type === "desk_notice_preferences" && Array.isArray(record.hidden)) { preferences({ hidden: record.hidden }); return; }
       if (record.type === "desk_ui_states" && Array.isArray(record.states)) {
         const next: Groups = {}; for (const row of record.states) if (typeof row.cwd === "string" && row.state) next[row.cwd] = normalized(row.state); update(() => next); return;
       }
@@ -31,7 +38,7 @@ export function ExtensionUiProvider({ children }: { children: ReactNode }) {
         const id = `${cwd}:${record.id}`;
         if (!seen.current.has(id)) {
           seen.current.add(id); const level = ["error", "warning"].includes(record.notifyType) ? record.notifyType : "info";
-          setToasts((rows) => [...rows.slice(-4), { id, cwd, level, message: plainUi(record.message) }]);
+          setToasts((rows) => [...rows.slice(-4), { id, cwd, level, message: plainUi(record.message), fingerprint: record.fingerprint, plugin: record.plugin }]);
           timers.current.set(id, setTimeout(() => { setToasts((rows) => rows.filter((row) => row.id !== id)); timers.current.delete(id); }, level === "error" ? 8000 : 5000));
         }
       }
@@ -40,6 +47,6 @@ export function ExtensionUiProvider({ children }: { children: ReactNode }) {
     return () => { unsubscribe(); for (const timer of timers.current.values()) clearTimeout(timer); };
   }, [subscribeRecords]);
   const pending = Object.entries(groups).flatMap(([cwd, snapshot]) => snapshot.dialogs.map((dialog) => ({ ...dialog, cwd }))).sort((a, b) => (a.requestedAt ?? 0) - (b.requestedAt ?? 0));
-  return <Context.Provider value={{ current: groups[state.cwd] ?? emptyUi(), pending, toasts, dismiss: (id) => { clearTimeout(timers.current.get(id)); timers.current.delete(id); setToasts((rows) => rows.filter((row) => row.id !== id)); },
+  return <Context.Provider value={{ current: groups[state.cwd] ?? emptyUi(), pending, toasts, hidden, loadPreferences, hide: (id) => changeNotice(id, true), restore: (id) => changeNotice(id, false), dismiss: (id) => { clearTimeout(timers.current.get(id)); timers.current.delete(id); setToasts((rows) => rows.filter((row) => row.id !== id)); },
     answer: (dialog, payload) => answerUi(dialog.cwd, { type: "extension_ui_response", id: dialog.id, ...payload }) }}>{children}</Context.Provider>;
 }

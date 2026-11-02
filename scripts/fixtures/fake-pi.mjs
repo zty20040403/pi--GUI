@@ -1,4 +1,6 @@
 // 仅供后台自动测试，不访问模型、不读取用户的 pi 配置。
+import { readFileSync, appendFileSync } from "node:fs";
+let entries = [];
 let buffer = "";
 let session = 0;
 let cancelNext = false;
@@ -18,14 +20,19 @@ process.stdin.on("data", (chunk) => {
       case "crash": process.exit(3); break;
       case "cancel_next": cancelNext = true; respond(cmd, {}); break;
       case "new_session":
-        if (!cancelNext) session++;
+        if (!cancelNext) { session++; sessionFile = undefined; entries = []; }
         respond(cmd, { cancelled: cancelNext }); cancelNext = false;
         break;
-      case "switch_session": respond(cmd, { cancelled: false }); break;
+      case "switch_session":
+        sessionFile = cmd.sessionPath;
+        entries = readFileSync(sessionFile, "utf8").trimEnd().split("\n").slice(1).map((line) => JSON.parse(line));
+        respond(cmd, { cancelled: false }); break;
+      case "get_entries": respond(cmd, { entries, leafId: entries.at(-1)?.id ?? null }); break;
+      case "test_append": entries.push(cmd.entry); appendFileSync(sessionFile, JSON.stringify(cmd.entry) + "\n"); emit({ type: "entry_appended", entry: cmd.entry }); respond(cmd, {}); break;
       case "get_state": respond(cmd, { sessionId: `fake-${session}`, sessionFile, isStreaming: streaming, model: { id: "test", provider: "test", baseUrl: "private-model-endpoint", headers: { authorization: "not-public" } } }); break;
       case "test_session_file": sessionFile = cmd.path; respond(cmd, {}); break;
       case "test_busy": streaming = cmd.enabled; emit({ type: streaming ? "agent_start" : "agent_settled", aborted: false }); respond(cmd, {}); break;
-      case "get_messages": respond(cmd, { messages: [] }); break;
+      case "get_messages": respond(cmd, { messages: entries.filter((entry) => entry.type === "message").map((entry) => entry.message) }); break;
       case "get_session_stats": respond(cmd, { cost: 0, tokens: { total: 0 } }); break;
       case "get_available_models": respond(cmd, { models: [{ id: "test", provider: "test", baseUrl: "private-model-endpoint", secret: "not-public" }] }); break;
       case "get_commands": respond(cmd, { commands: [{ name: "test-command" }] }); break;

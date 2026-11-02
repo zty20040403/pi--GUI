@@ -13,6 +13,7 @@ export type PoolOptions = {
   sweepIntervalMs?: number;
   now?: () => number;
   createProcess?: (cwd: string, args: string[]) => PiProcess;
+  processEnv?: NodeJS.ProcessEnv;
 };
 type Entry = { pi: PiProcess; lastActivity: number; busy: boolean };
 
@@ -56,6 +57,8 @@ export class PiPool extends EventEmitter {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
     }
+    const mappingPath = resolve(ROOT, "pi-extension", "desk-session-map.ts");
+    try { if ((await stat(mappingPath)).isFile()) args.push("-e", mappingPath); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     if (this.closing) throw new Error("后台正在关闭");
     // 所有异步检查之后才读 Map，并立刻插入；并发 get 不会启动两个进程。
     const current = this.processes.get(canonical);
@@ -63,14 +66,14 @@ export class PiPool extends EventEmitter {
       current.lastActivity = this.now();
       return current.pi;
     }
-    const pi = this.options.createProcess?.(canonical, args) ?? new PiProcess(canonical, { args });
+    const pi = this.options.createProcess?.(canonical, args) ?? new PiProcess(canonical, { args, env: this.options.processEnv });
     const entry: Entry = { pi, lastActivity: this.now(), busy: false };
     this.processes.set(canonical, entry);
     pi.on("activity", () => { entry.lastActivity = this.now(); });
     pi.on("record", (record: RpcRecord) => {
       if (record.type === "agent_start") entry.busy = true;
       if (record.type === "agent_settled") entry.busy = false;
-      this.emit("record", canonical, record, sequenceOf(record), pi.sessionFile);
+      this.emit("record", canonical, record, sequenceOf(record), pi.sessionFile, pi);
     });
     pi.on("ui_resolved", (id: string, reason: string) => this.emit("ui_resolved", canonical, id, reason));
     pi.on("ui_state", (state) => this.emit("ui_state", canonical, state));

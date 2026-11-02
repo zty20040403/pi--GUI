@@ -118,7 +118,7 @@ async function main() {
     await expect(page.locator(".extension-toast")).toHaveCount(0, { timeout: 12000 }); await send(page, "/desk-test-clear"); await idle(page); await expect(page.locator(".widget-panel")).toHaveCount(0); await expect(page.locator(".statusbar")).not.toContainText("FIXTURE STATUS");
     console.log("补充 UI 验收通过：select/confirm/input/editor、待答刷新、两个同时排队、取消、notify 颜色与自动消失、上下 Widget/清除、状态、标题及预填文字；Cmd+V 图片与移除也通过");
     // 5: 真实计划插件菜单 -> Implement here -> AI 创建 hello.sh。
-    await fresh(); const planStart = wire.length; await send(page, "/plan 写一个 hello.sh，放当前项目，内容只需要运行时输出 hello。只创建文件，不要执行，不要 chmod。");
+    await fresh(); const planStart = wire.length; await send(page, "/plan 请先为当前项目的 hello.sh 提交一份实施计划，不要现在创建文件。需求已明确，无需提问：脚本运行时只输出 hello；实施时只创建文件，不执行，不 chmod。请调用 plan_mode_complete 提交计划，等待我在计划菜单点击 Implement here 后再实施。");
     const planDeadline = Date.now() + 180000; let implement = false;
     while (Date.now() < planDeadline && !implement) {
       if (await dialog(page).count()) {

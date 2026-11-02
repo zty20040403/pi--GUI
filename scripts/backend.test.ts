@@ -126,7 +126,7 @@ test("进程池复用/并发/软链接、权限插件参数、退出删除、空
   try {
     const pi = await plain.get(process.cwd());
     const inspected = await pi.request({ type: "inspect" });
-    assert.deepEqual((inspected.data as { argv: string[] }).argv, ["--mode", "rpc"]);
+    assert.deepEqual((inspected.data as { argv: string[] }).argv, ["-e", resolve("pi-extension/desk-session-map.ts"), "--mode", "rpc"]);
   } finally { await plain.dispose(); }
 });
 
@@ -237,7 +237,7 @@ test("真实 HTTP/WS 转发、广播、UI 回答、非法请求和生产静态�
     await assert.rejects(a.open(root), /取消/);
     await assert.rejects(a.rpc(root, { type: "switch_session", sessionPath: resolve("package.json") }));
     const exit = b.waitFor((message) => message.op === "exit");
-    await assert.rejects(a.rpc(root, { type: "crash" }), /exited/);
+    await assert.rejects(a.rpc(root, { type: "crash" }), /已退出/);
     assert.equal((await exit).cwd, root);
     assert.equal(pool.size, 0);
     await a.open(root);
