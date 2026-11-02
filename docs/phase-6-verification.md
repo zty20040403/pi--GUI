@@ -52,7 +52,13 @@ Kenneth 已表示有 Windows 电脑并亲自操作。提供的步骤是：
 2. Windows PowerShell 建立仅本地监听的 SSH 转发，登录后保留窗口。
 3. 在 Windows Chrome/Edge 打开完整网址，选 Luna/low，发最小消息并确认收到回复。
 
-Kenneth 在操作指导后反馈 **“他回了”**；说明验收成功条件是在 Windows 浏览器收到 AI 回复后，Kenneth 恢复任务进行收尾。按这项用户真机反馈，Windows 验收通过。**这不是代理直接操作 Windows 的自动测试，也没有额外读取私人对话或索取截图/口令来重复验证。**
+Kenneth 最初反馈“他回了”，这句话未明确设备，因此补问一次，不重跑聊天：
+
+> 确认一下：你是在 Windows 电脑的浏览器里，通过刚才的 SSH 转发打开 pi desk，并收到 AI 回复了，对吗？
+
+Kenneth 在选择题中明确选择 **“是，Windows 浏览器收到回复”**。这直接确认 Windows SSH 转发、浏览器访问和实际收到 AI 回复，按该用户真机结果完成验收。
+
+原始确认题目与所选答案另记在忽略提交的 `.pi-desk/verification/phase-6-windows-summary.json`。Mac 自动脚本生成的 `phase-6-mac-summary.json` 中 `windows=pending user verification` 是脚本当时的 Mac-only 范围，不代表随后明确收到的用户反馈仍待定。**这不是代理直接操作 Windows 的自动测试，也没有额外读取私人对话或索取截图/口令来重复验证。**
 
 操作说明和故障处理见 README。没有索取或提交登录密码、私钥、完整启动口令；后续只做记录和公开提交检查，不再重复付费聊天测试。
 
