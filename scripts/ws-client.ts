@@ -1,6 +1,5 @@
 import { EventEmitter } from "node:events";
 import { WebSocket } from "ws";
-import { BASE_URL } from "../server/auth.js";
 
 export type DeskMessage = { op: string; [key: string]: any };
 type Waiter = { predicate: (message: DeskMessage) => boolean; resolve: (message: DeskMessage) => void; reject: (error: Error) => void; timer: NodeJS.Timeout };
@@ -15,13 +14,13 @@ export class DeskClient extends EventEmitter {
   constructor(launchUrl: string) {
     super();
     const launch = new URL(launchUrl);
-    if (launch.protocol !== "http:" || !["127.0.0.1:4317", "localhost:4317"].includes(launch.host) || !launch.searchParams.get("token")) {
+    if (launch.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(launch.hostname) || !launch.port || launch.username || launch.password || !/^[a-f0-9]{64}$/.test(launch.searchParams.get("token") ?? "")) {
       throw new Error("请提供后台打印的本机带口令网址");
     }
     const url = new URL("/ws", launch);
     url.protocol = "ws:";
     url.searchParams.set("token", launch.searchParams.get("token")!);
-    this.socket = new WebSocket(url, { origin: BASE_URL, handshakeTimeout: 10_000 });
+    this.socket = new WebSocket(url, { origin: launch.origin, handshakeTimeout: 10_000 });
     this.ready = new Promise((resolve, reject) => {
       this.socket.once("open", resolve);
       this.socket.once("error", reject);

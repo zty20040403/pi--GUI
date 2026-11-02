@@ -240,7 +240,7 @@ async function main() {
     backend = await startBackend({ production: true });
     const production = await setupPage(browser, { cwd, sessionPath }); await production.page.goto(backend.url); await idle(production.page);
     await expect(production.page.locator("article[data-role=assistant]").last()).toContainText("模型切换验证通过"); await production.context.close();
-    console.log("生产构建浏览器验证通过：dist 静态页面在 4317 恢复同一历史，无额外模型调用");
+    console.log("生产构建浏览器验证通过：dist 静态页面在后台端口恢复同一历史，无额外模型调用");
     console.log("第 2 阶段全部验收通过；截图在忽略提交的 .pi-desk/verification/ 下。");
   } finally {
     await browser?.close(); await backend?.stop();

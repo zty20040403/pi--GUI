@@ -9,6 +9,7 @@ import { test } from "node:test";
 import { promisify } from "node:util";
 import { FileService, MAX_FILE } from "../server/files.js";
 import { createDeskServer } from "../server/index.js";
+import { BASE_URL } from "../server/auth.js";
 import { PiPool } from "../server/pi-pool.js";
 import { PiProcess } from "../server/pi-process.js";
 import { imageMime, uploadName, UploadService, type UploadedFile } from "../server/uploads.js";
@@ -39,7 +40,7 @@ test("鉴权原始字节上传、普通/已打开项目约束、唯一文件名�
   const exclude = join(root, ".git", "info", "exclude"); await writeFile(exclude, "# fictional fixture\nkeep-fixture");
   const pool = new PiPool({ permissionsEnabled: false, createProcess: (cwd) => new PiProcess(cwd, { binary: process.execPath, args: [fake] }) });
   const desk = createDeskServer({ pool }); let client: DeskClient | undefined;
-  const url = (name: string, cwd = root) => `http://127.0.0.1:4317/api/upload?${new URLSearchParams({ cwd, name })}`;
+  const url = (name: string, cwd = root) => `${BASE_URL}/api/upload?${new URLSearchParams({ cwd, name })}`;
   const body = Buffer.from("fixture 汉字\0raw bytes");
   try {
     await desk.listen(); const headers = { Authorization: `Bearer ${desk.auth.token}` };
@@ -72,7 +73,7 @@ test("50MB 真正流式上限、超限未完成文件移到废纸篓，上传目
   const partials: string[] = [];
   const pool = new PiPool({ permissionsEnabled: false, createProcess: (cwd) => new PiProcess(cwd, { binary: process.execPath, args: [fake] }) });
   const desk = createDeskServer({ pool, trash: async (path) => { partials.push(path); await exec("trash", [path]); } }); let client: DeskClient | undefined;
-  const url = `http://127.0.0.1:4317/api/upload?${new URLSearchParams({ cwd: project, name: "large.bin" })}`;
+  const url = `${BASE_URL}/api/upload?${new URLSearchParams({ cwd: project, name: "large.bin" })}`;
   try {
     await desk.listen(); client = new DeskClient(desk.auth.launchUrl); await client.ready; await client.open(project);
     assert.equal(await chunkedUpload(url, desk.auth.token, MAX_FILE), 200, "刚好 50MB 可上传");
@@ -80,7 +81,7 @@ test("50MB 真正流式上限、超限未完成文件移到废纸篓，上传目
     assert.equal(partials.length, 1); await assert.rejects(stat(partials[0]), { code: "ENOENT" });
     assert.equal((await readdir(join(project, ".pi-desk", "uploads"))).length, 1);
     const linked = join(root, "linked-project"); await mkdir(linked); await symlink(external, join(linked, ".pi-desk")); await client.open(linked);
-    const response = await fetch(`http://127.0.0.1:4317/api/upload?${new URLSearchParams({ cwd: linked, name: "escape.bin" })}`, { method: "POST", headers: { Authorization: `Bearer ${desk.auth.token}` }, body: "fixture" });
+    const response = await fetch(`${BASE_URL}/api/upload?${new URLSearchParams({ cwd: linked, name: "escape.bin" })}`, { method: "POST", headers: { Authorization: `Bearer ${desk.auth.token}` }, body: "fixture" });
     assert.equal(response.status, 403); assert.deepEqual(await readdir(external), []);
   } finally { client?.close(); await desk.close(); await exec("trash", [root]); }
 });

@@ -1,10 +1,10 @@
 # pi desk
 
-Kenneth 的 pi 图形客户端，底层遥控本机现有的 pi。完整方案见 [`PLAN.md`](PLAN.md)，开发规矩见 [`AGENTS.md`](AGENTS.md)。
+Kenneth 的 pi 图形客户端，可以运行本机已有的 pi，也附带固定版本的内置 pi。完整方案见 [`PLAN.md`](PLAN.md)，开发规矩见 [`AGENTS.md`](AGENTS.md)。
 
-**当前进度：第一版六个阶段及第二版第 7–10 阶段已完成。** 新增终端对话实时同步、外部修改保护、失效项目重新指定、中文错误详情、插件提醒隐藏/恢复、自绘模型/权限菜单和横向推理滑杆、插件管理页面，以及每轮改动卡片和 diff 审阅。第二版后续工作见 [`PLAN-v2.md`](PLAN-v2.md)。Mac 应用通过实际启动/聊天验收；Windows SSH 远程使用曾由 Kenneth 在真机确认，Windows 本地版尚未实现。
+**当前进度：第一版六个阶段及第二版第 7–11 阶段已完成。** 新增终端对话实时同步、外部修改保护、失效项目重新指定、中文错误详情、插件提醒隐藏/恢复、自绘模型/权限菜单和横向推理滑杆、插件管理页面，以及每轮改动卡片和 diff 审阅。第 11 阶段提供内置 pi、独立 Node 后台、动态端口、中文原生菜单及有临时签名的 macOS dmg / zip；自动验收与 Kenneth 的系统操作手动验收均已通过。 安装方法见下方 [Mac 应用](#mac-应用)，验收进度见 [`docs/phase-11-verification.md`](docs/phase-11-verification.md)。第二版后续工作见 [`PLAN-v2.md`](PLAN-v2.md)。Windows SSH 远程使用曾由 Kenneth 在真机确认，Windows 本地版尚未实现。
 
-## 怎么打开试
+## 浏览器开发版怎么打开试
 
 打开 Mac 的“终端”，运行：
 
@@ -75,7 +75,7 @@ npm run dev
 
 ## 界面和快捷键
 
-- **左边**：项目分组可折叠；搜索匹配名字、第一句话或项目路径。家目录分组提示“在这里没有长期记忆”。最近项目和列表宽度保存在浏览器本地，不包含口令。
+- **左边**：项目分组可折叠；搜索匹配名字、第一句话或项目路径。家目录分组提示“在这里没有长期记忆”。浏览器版把最近项目和列表宽度保存在浏览器本地；桌面版另存到自己的窗口设置，换端口重开也能恢复，不保存口令或对话正文。
 - **顶部栏**：当前项目 / 可点击改名的对话标题，右边是连接状态小圆点、“暂停目标”（有目标时）和文件面板开关。
 - **模型与推理胶囊**：显示“gpt-6-luna · 低”这样的合并文字。点击弹出搜索面板，模型按提供商分组、右侧显示每百万 token 的输入/输出价格。↑↓ 选择，Enter 确认；选模型后焦点转到推理滑杆，←→ 调整，Esc 关闭并回到胶囊。滑杆也可以向右拖动或点刻度，只显示当前模型支持的档位；不支持时有说明，不猜测可用档位。
 - **权限胶囊**：三项自绘菜单带说明；选择“完全放开”会再确认一次，默认焦点在“取消”。回复时不能切换模型，权限仍可调整。有项目目标记录时会显示“暂停目标”，行为和终端 `/goal-pause` 相同。
@@ -159,35 +159,49 @@ npm start
 
 打开终端打印的网址，生产模式直接在 4317 提供页面。开发模式或生产模式任选一个，不要同时启动两个后台。
 
-目前需要 Node.js 22 或更新版本、npm 和已配置好的 pi `1.4.0` 接口。测试用模型需有 `cliproxy/gpt-6-luna`。验收脚本清理临时文件使用 macOS `trash`。
+源码开发需要 Node.js ≥ 22.19（或更新的兼容 LTS）、npm，以及已有的 pi 模型配置。测试用模型需有 `cliproxy/gpt-6-luna`。验收脚本清理临时文件使用 macOS `trash`。**安装好的 Mac App 启动和聊天不需要系统 Node。**
 
 ## Mac 应用
 
-本机已安装到 **`~/Applications/pi desk.app`**。Finder 按 `Cmd+Shift+G`，输入 `~/Applications`，找到应用双击打开。第一次被系统拦住时，右键 → 打开；若系统询问访问项目文件夹权限，按你的意愿允许。应用未签名、未公证，只构建 Apple 芯片版。
+### 安装（Apple 芯片 Mac）
 
-- 启动时自己运行后台，不需要另外开终端；关窗口或退出时回收后台。
-- 仍使用你现有的 Node.js/pi，Finder 启动时会补上常用的用户/Nix PATH；只有插件页面的明确操作会修改共享的插件设置，不改模型或受保护配置。
-- 默认打开上次用系统选择器选过的项目；首次没有项目时打开家目录，再点“打开文件夹”选项目。
-- 记住窗口位置和大小。“在 Finder 中显示”走经过后台路径校验的原生接口。
-- **不要和 npm start/dev 同时启动**，它们都使用 4317。
+1. 先用 **⌘Q** 退出旧版 pi desk。
+2. 打开 `release/pi desk-0.1.0-arm64.dmg`，把 **π 图标拖到右边“应用程序”**。也提供同版本 `.zip`，解压后把 App 移到应用程序即可。
+3. 从应用程序打开 pi desk。首次被系统拦住时，**右键 → 打开**；较新的 macOS 可能还需在“系统设置 → 隐私与安全性”确认“仍要打开”。只对自己构建或信任的安装包这样操作，不关闭系统安全检查。
+4. 已有 pi 配置时直接使用；模型凭据不在安装包里，也不会自动生成。若系统询问访问项目文件夹权限，按你的意愿允许。
 
-要从源码重新打包，在 Mac 运行：
+这是 **ad-hoc 本机临时签名**，已用 `codesign --verify --deep --strict` 验证；不是 Apple Developer ID 签名，也没有公证。当前只构建 arm64，不是 Intel/通用版。
+
+以前的本机副本位于 `~/Applications/pi desk.app`。如果改装到 `/Applications` 后出现两个同名应用，请先确认退出旧版，再把个人 `~/Applications` 中的旧 App 移到废纸篓；**只移动 App，不动 `~/.pi` 或 `~/.pi-desk`**。保留在个人应用程序目录也可以，但验收时要确认打开的是新版本。
+
+### 引擎、窗口和菜单
+
+- 后台用 **Electron 自带的 Node**，不寻找系统 node；内置 **pi 1.4.0**。自动模式优先用系统 pi，找不到才用内置；设置 → **pi 引擎** 可以选择自动 / 系统 / 内置，并查看当前版本。两种引擎都使用同一个 `~/.pi/agent`，不打包或改写用户模型配置。
+- 切换引擎必须等所有项目空闲、插件问题处理完；切换成功保留历史、草稿和模型设置。所选引擎不可用会明确报错，不偷偷改用另一种。
+- App 自动分配空闲端口，**可以和默认占用 4317 的 `npm start` 同时运行**。再次打开同一个 App 会恢复原窗口，不多开后台；同一段对话仍不要在两边同时发送。
+- **红色关窗按钮 / ⌘W** 只隐藏窗口，后台继续；点 Dock 图标恢复。**⌘Q** 才真正退出并回收后台，有项目回复、等待插件问题或安装插件时先提醒。
+- 中文菜单提供 **设置 ⌘,、新对话 ⌘N、关闭窗口 ⌘W、退出 ⌘Q**，以及复制粘贴、缩放、关于。实际系统按键与启动台、Spotlight、Dock 入口已由 Kenneth 手动确认。
+- 默认打开上次用系统选择器选过的项目；首次打开家目录。窗口位置、大小、侧栏布局和最近项目保存在桌面应用自己的 `window.json`，不保存口令和聊天正文。隐藏窗口会保留内存中的草稿；真正退出后的草稿恢复不保证。
+- 插件安装仍需要系统包管理器（npm；Git 来源还需要 git），App 不附带 npm。缺少时明确提示；内置 pi 的启动和聊天不受影响。
+
+### 从源码打包
 
 ```bash
 cd ~/Desktop/"pi harness"
 npm ci
-npm run desktop:build
-mkdir -p ~/Applications
-ditto "release/mac-arm64/pi desk.app" ~/Applications/"pi desk.app"
+npm run desktop:dist
+open "release/pi desk-0.1.0-arm64.dmg"
 ```
 
-更新前先退出旧应用。`npm run build && npm run desktop` 可运行开发桌面入口。如果 npm 的 Electron 解压未完成，执行 `npm run desktop:install` 补齐经官方校验的本机运行文件。
+`npm run desktop:build` 只生成本地测试 App，位于 **`~/Library/Caches/pi-desk/build/pi desk.app`**；`desktop:dist` 额外生成 `release/` 下的 dmg / zip。签名和封装在系统临时目录完成，避免桌面同步服务反复写入 Finder 元数据而破坏签名；不再把裸 App 放到桌面仓库的 `release/mac-arm64`。
+
+`npm run build && npm run desktop` 可运行开发桌面入口；`npm run desktop:icons` 从矢量源重新生成 PNG / ICNS / ICO。若 npm 的 Electron 解压未完成，执行 `npm run desktop:install` 补齐经官方校验的本机运行文件。
 
 ## 从 Windows 远程用
 
 这是 **Windows 浏览器访问 Mac 后台**，不是 Windows 上安装 Electron；项目文件、工具和对话仍在 Mac。两台电脑要能通过 SSH 连通。
 
-**1. Mac 上关闭桌面应用，打开终端：**
+**1. Mac 上打开终端（桌面应用可保留，但不要同时写同一对话）：**
 
 ```bash
 cd ~/Desktop/"pi harness"
@@ -214,13 +228,13 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:4317:127.0.0.1:4317 kenneth@alex
 - **Permission denied**：检查登录账号、密码或现有密钥配置，不要发送密码/私钥给别人。
 - **Address already in use / cannot listen to port**：Windows 本地 4317 已占用，先关闭旧 SSH 转发或占用该端口的程序。不要随意改转发端口，否则 Host 校验会拒绝。
 - **未授权 / 401**：用 Mac 后台本次打印的完整网址；重启后台会换口令。
-- **网页打不开**：先看 SSH 有没有报错，再确认 Mac 的 npm start 还运行着，且没有同时启动桌面应用。
+- **网页打不开**：先看 SSH 有没有报错，再确认 Mac 的 npm start 还运行着，并使用它本次打印的网址。
 
 ## 检查和完整验收
 
 ```bash
 npm run typecheck       # 后台、前端、脚本和 Vite 配置的 TypeScript
-npm test                # 不调用模型：70 组自动测试（含真实 pi 权限/目录映射、插件与快照边界）
+npm test                # 不调用模型：75 组自动测试（含真实 pi 权限/目录映射、插件与快照边界）
 npm run build           # 构建真实聊天网页
 npm run verify:phase1   # 后台完整验收，包含一次真实模型请求
 npm run verify:phase2   # 真实 Chrome 聊天页 + 终端 pi -r + 生产页面验收
@@ -230,8 +244,9 @@ npm run verify:phase5   # 附件/插件/计划/清单/三档权限，真实 Chro
 npm run test:permissions # 纯规则、授权范围、路径及真实 pi 权限菜单
 npx tsx scripts/verify-permissions.ts # 真 pi 工具流水线 105 条；危险执行器为测试替身
 npm run fixtures        # 重新生成完全合成的测试文件（不读取私人文件）
-npm run test:desktop    # 4 组桌面专用安全/配置测试，无模型调用
-npm run desktop:build   # 网页、后台打包和未签名的 Mac arm64 应用
+npm run test:desktop    # 6 组桌面专用安全/配置测试，无模型调用
+npm run desktop:build   # 网页、后台、内置 pi 及临时签名的 Mac arm64 应用
+npm run desktop:dist    # 另生成 dmg / zip 安装包
 npm run verify:phase6   # Mac 必要验收；不自动验证 Windows
 npm run verify:phase7   # 真实终端同步 + 失效项目/故障/插件提醒 + 深浅截图
 npm run verify:phase8   # 菜单键盘/拖动/确认 + 真实 pi 动态档位和权限 + 深浅截图
@@ -239,6 +254,13 @@ npm run verify:phase9   # 插件页面 + 隔离配置真实安装/卸载、搜�
 npm run verify:phase10:capture # 真实 pi 的工具前后快照、统计与后台重启恢复
 npm run verify:phase10  # 两轮真实修改、三个范围、diff/高亮/折叠/刷新与深浅截图
 PI_DESK_VERIFY_CHANGES=1 npm run verify:phase6 # 打包 App 真正修改文件、退出后重开并恢复历史卡片
+npm run verify:phase11:engine # 系统/内置 pi 真实聊天、切换保留状态及重开
+npm run verify:phase11:ports  # 4317 占用、单实例、跨端口偏好恢复及后台退出
+npm run verify:phase11:native # 原生菜单接线、关窗保活、忙时退出；系统按键另手测
+PI_DESK_VERIFY_PACKAGED=1 npm run verify:phase11:engine # 对打包 App 重复引擎验收
+PI_DESK_VERIFY_PACKAGED=1 npm run verify:phase11:ports
+PI_DESK_VERIFY_PACKAGED=1 npm run verify:phase11:native
+PI_DESK_VERIFY_CHANGES=1 npm run verify:phase11:package -- --launch # dmg/zip/签名/图标 + 安装副本完整桌面验收
 ```
 
 先关闭其他占用 4317 / 5173 的后台。第 2–5 阶段验收使用已安装的 Google Chrome；终端恢复检查还使用 Python 3。Playwright 已固定为开发依赖，不需要下载额外浏览器。日常使用网页不需要 Playwright 或 Python。
@@ -247,15 +269,17 @@ PI_DESK_VERIFY_CHANGES=1 npm run verify:phase6 # 打包 App 真正修改文件�
 
 测试创建临时项目和测试对话，结束时只用 `trash` 把它们移到废纸篓，不动你已有的对话。截图存到忽略提交的 `.pi-desk/verification/`，不会提交口令或私人对话。
 
-具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)、[`第 5 阶段`](docs/phase-5-verification.md)、[`第 6 阶段`](docs/phase-6-verification.md)、[`第 7 阶段`](docs/phase-7-verification.md)、[`第 8 阶段`](docs/phase-8-verification.md)、[`第 9 阶段`](docs/phase-9-verification.md)、[`第 10 阶段`](docs/phase-10-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
+具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)、[`第 5 阶段`](docs/phase-5-verification.md)、[`第 6 阶段`](docs/phase-6-verification.md)、[`第 7 阶段`](docs/phase-7-verification.md)、[`第 8 阶段`](docs/phase-8-verification.md)、[`第 9 阶段`](docs/phase-9-verification.md)、[`第 10 阶段`](docs/phase-10-verification.md)、[`第 11 阶段`](docs/phase-11-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
 
 ## 后台协议（给后续开发用）
 
-只监听 `127.0.0.1:4317`，每次随机生成 32 字节 hex 口令。所有 HTTP API 要求 `Authorization: Bearer <启动口令>`：
+只监听 `127.0.0.1`，每次随机生成 32 字节 hex 口令。浏览器后台默认 4317，`PI_DESK_PORT` 可覆盖；桌面以端口 0 让系统原子分配空闲端口，启动网址包含实际端口。所有 HTTP API 要求 `Authorization: Bearer <启动口令>`：
 
 | 请求 | 返回 |
 |---|---|
-| `GET /api/health` | `{ok: true, phase: 10, processes: 数量}` |
+| `GET /api/health` | `{ok: true, phase: 11, processes: 数量}` |
+| `GET /api/activity` | `{working: boolean}`，供退出提醒读取全部项目/插件工作状态 |
+| `GET /api/engine` / `POST /api/engine` | 当前来源/版本/可用性；手动选择 `{mode: "auto" \| "system" \| "builtin"}`，只在空闲时切换 |
 | `GET /api/workspace` | `{cwd: 后台项目根目录, home: 家目录}` |
 | `GET /api/projects` | `{projects: [{cwd, sessions: [{path, id, cwd, title, name?, mtime}]}], activity: [{cwd, sessionPath?, busy}]}` |
 | `POST /api/projects/relocate` | JSON `{cwd,path}`，仅为失效项目设置 App 映射，实际 pi runtime 使用新 cwd |
@@ -276,7 +300,7 @@ PI_DESK_VERIFY_CHANGES=1 npm run verify:phase6 # 打包 App 真正修改文件�
 | `GET /api/changes/review?cwd=&sessionId=&scope=&turnId=&toolId=` | turn / session / git 的只读快照；可指定这一轮内的单个工具 |
 | `GET /api/goals?cwd=` | 从已打开项目目标文件读取公开进度，不返回调度器/存储配置，不允许越界软链接 |
 
-WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式允许本机 5173 Origin，生产模式只允许本机 4317 Origin。命令行客户端也要发送 Origin。
+WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式允许本机 5173 Origin，生产模式只允许本次后台实际端口的 Origin。命令行客户端也要发送 Origin。
 
 ```typescript
 // 客户端 → 后台
@@ -313,21 +337,21 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 
 `open` 不带路径通常新建；未保存但正在等插件回答的空对话例外，恢复该活动对话而不误建。刷新/重连带已有路径；对同一活动会话直接读取，不重新 switch。`prompt` 成功仅表示接收，必须等 `agent_settled` 才算彻底完成。停止会显式取消仍待答的插件请求，避免未传 AbortSignal 的插件卡住。
 
-权限扩展的判断和 realpath 校验在 pi 的 tool_call 钩子里，支持嵌套调用。查看用 Git 查询禁用外部 diff/textconv、pager 和 fsmonitor；不是完整 shell 沙箱。开发用 SDK 固定为 devDependency，只用于类型/验收，后台仍启动用户原来的 pi；子进程 PATH 排除 npm 临时的 node_modules/.bin，避免误启动 SDK 自带的同名裸 CLI。
+权限扩展的判断和 realpath 校验在 pi 的 tool_call 钩子里，支持嵌套调用。查看用 Git 查询禁用外部 diff/textconv、pager 和 fsmonitor；不是完整 shell 沙箱。pi SDK 作为正式依赖固定为 1.4.0，内置引擎用 Electron Node 启动其真实 CLI；自动模式仍优先使用用户原来的 pi。子进程 PATH 排除 npm 临时的 node_modules/.bin，避免把系统引擎误识别成开发依赖的裸 CLI。
 
 ## 常见问题和已知限制
 
-- **端口占用 / EADDRINUSE**：在之前启动的终端按 `Ctrl+C`；不要同时运行开发和生产后台。确实要同时再开一份（比如改界面时不想停掉正在用的那份），可以 `PI_DESK_PORT=4327 npm run dev`，打开它打印的 4327 网址。自动测试仍固定用 4317，跑测试前要先停掉 4317 上的后台。
+- **端口占用 / EADDRINUSE**：在之前启动的终端按 `Ctrl+C`；不要同时运行开发和生产后台。确实要同时再开一份（比如改界面时不想停掉正在用的那份），可以 `PI_DESK_PORT=4327 npm run dev`，打开它打印的 4327 网址。自动测试默认用 4317，也接受 `PI_DESK_PORT`；需要串行运行，先停掉相同端口的浏览器后台。桌面 App 自己使用独立端口，无需因此退出。
 - **同步不是多人协作锁**：会在检测到外部改动后禁止发送，但不能锁住终端的 pi；仍建议同一对话只在一边发送。没有实现可选的 lsof“终端正在打开”探测。
 - **页面连接不上**：确认后台终端还开着。如果重启过，用本次打印的新网址；不要公开保存真实口令。
-- **找不到 pi**：先在同一个终端运行 `pi --version`；必要时用 `PI_BIN=/pi/可执行文件的绝对路径 npm run dev` 指定路径。
+- **找不到 pi**：桌面设置里可选内置引擎；要用系统 pi，先在终端运行 `pi --version`。源码开发还可以用 `PI_BIN=/pi/可执行文件的绝对路径 npm run dev` 指定路径。
 - **找不到模型 / 请求报错**：先在终端 pi 里确认 `cliproxy/gpt-6-luna` 能用。本项目不替你改模型配置；新对话按 pi 的默认配置，新建后请重新确认模型和推理档位。
 - **旧对话的思考耗时**：pi 没保存耗时就只显示“思考过程”，不会编造 N 秒；当前流式回复会计时。
 - **旧项目目录已不存在**：会话仍在列表中；点进去可重新指定文件夹，也可确认后移到废纸篓。App 映射不改变终端的原目录。
-- **还没做**：独立运行引擎、正式图标/安装包、系统级通知及改动撤销。当前只有标题提醒，没有系统通知；Electron 无自动更新。
+- **还没做**：Windows 本地版、系统级通知及改动撤销。当前只有标题提醒，没有系统通知；没有自动更新。Mac 安装包有临时签名，但没有 Apple 公证。
 - **未验证**：Safari、Intel Mac 及装好 LibreOffice 后的隔离转换。Windows SSH/浏览器由 Kenneth 真机反馈通过，非代理自动操作。Mac Electron 已实际启动/聊天，Finder 显示已实际调用；系统默认软件打开仍只检查参数接线，没自动启动用户的其他 GUI 应用。
-- **依赖审计**：当前仍有 **27 项告警：23 moderate、4 high**，涉及 Vite 开发链、ExcelJS、SDK、Electron 和打包链。Electron 35 是方案指定的旧版本，不应认为仍有持续安全维护；主窗口为兼容隔离 HTML 开关保留 CSP unsafe-inline，也不能宣称完全防 XSS。SDK 不作为生产发动机，打包不包含开发 node_modules，但这不等于告警无风险。需独立升级/回归，没有用 `npm audit fix --force` 擅自跨大版本。只在本机可信项目使用，不暴露到公网。
+- **依赖审计**：2026-11-02 完整 `npm audit` 为 **22 moderate、0 high、0 critical**。按 Kenneth 明确批准升级 Electron 到 **44.10.1**（安全补丁未满两周的例外）、Vite 到 **7.3.7**，pi 固定 **1.4.0**；已重跑真实 RPC/聊天、Chrome 文件预览及桌面验收。剩余中危涉及 SDK、ExcelJS 和打包依赖链，并非零风险，没有用 `npm audit fix --force` 自动升级或降级。主窗口为兼容隔离 HTML 开关保留 CSP unsafe-inline，也不能宣称完全防 XSS。只在本机可信项目使用，不暴露到公网。
 
 ## 致谢
 
-- [pi-gui](https://github.com/minghinmatthewlam/pi-gui)（MIT）：第 8 阶段参考其 `apps/desktop/src/features/conversation/model-selector.tsx` 的模型搜索/分组结构及菜单视觉设计，适配在 `src/components/chat/ModelBar.tsx`。来源版本 `faf8edd6d7a7e3bf3c508d6f600a22d3821ac108`；保留 [完整 MIT 许可](docs/licenses/pi-gui-MIT.txt)，桌面 App 也携带该许可。第 9 阶段还参考 `apps/desktop/src/features/extensions/extensions-view.tsx` 的资源行布局，适配在 `src/components/plugins/PluginsPage.tsx`。第 10 阶段的 `src/components/changes/TurnChangesCard.tsx` 及 `changes.css` 的卡片布局改编自 `apps/desktop/src/features/conversation/turn-changes-card.tsx`；快照与 diff 面板另行实现，只参考其交互。未复制其引擎或整体分层。
+- [pi-gui](https://github.com/minghinmatthewlam/pi-gui)（MIT）：第 8 阶段参考其 `apps/desktop/src/features/conversation/model-selector.tsx` 的模型搜索/分组结构及菜单视觉设计，适配在 `src/components/chat/ModelBar.tsx`。来源版本 `faf8edd6d7a7e3bf3c508d6f600a22d3821ac108`；保留 [完整 MIT 许可](docs/licenses/pi-gui-MIT.txt)，桌面 App 也携带该许可。第 9 阶段还参考 `apps/desktop/src/features/extensions/extensions-view.tsx` 的资源行布局，适配在 `src/components/plugins/PluginsPage.tsx`。第 10 阶段的 `src/components/changes/TurnChangesCard.tsx` 及 `changes.css` 的卡片布局改编自 `apps/desktop/src/features/conversation/turn-changes-card.tsx`；快照与 diff 面板另行实现，只参考其交互。第 11 阶段的 `electron-builder.yml` 安装包布局参考其 `apps/desktop/electron-builder.yml`。未复制其引擎或整体分层。

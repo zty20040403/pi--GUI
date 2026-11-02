@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { promisify } from "node:util";
 import { FileService, MAX_FILE, byteRange, fileMime } from "../server/files.js";
 import { createDeskServer } from "../server/index.js";
+import { BASE_URL } from "../server/auth.js";
 import { OfficePreview } from "../server/office.js";
 import { PiPool } from "../server/pi-pool.js";
 import { PiProcess } from "../server/pi-process.js";
@@ -62,7 +63,7 @@ test("真实鉴权 HTTP 文件/HEAD/Range/信息/树/系统打开，未知项目
   const pool = new PiPool({ permissionsEnabled: false, createProcess: (cwd) => new PiProcess(cwd, { binary: process.execPath, args: [fake] }) });
   const launched: { path: string; reveal: boolean }[] = [];
   const desk = createDeskServer({ pool, systemOpen: async (path, reveal) => { launched.push({ path, reveal }); } }); let client: DeskClient | undefined;
-  const url = (api: string, name = path) => `http://127.0.0.1:4317/api/${api}?${new URLSearchParams({ cwd: root, path: name })}`;
+  const url = (api: string, name = path) => `${BASE_URL}/api/${api}?${new URLSearchParams({ cwd: root, path: name })}`;
   try {
     await desk.listen(); const headers = { Authorization: `Bearer ${desk.auth.token}` };
     assert.equal((await fetch(url("file"))).status, 401); assert.equal((await fetch(url("file"), { headers })).status, 403);
@@ -72,11 +73,11 @@ test("真实鉴权 HTTP 文件/HEAD/Range/信息/树/系统打开，未知项目
     const head = await fetch(url("file"), { method: "HEAD", headers }); assert.equal(head.status, 200); assert.equal(await head.text(), ""); assert.equal(Number(head.headers.get("content-length")), content.length);
     const ranged = await fetch(url("file"), { headers: { ...headers, Range: "bytes=0-5" } }); assert.equal(ranged.status, 206); assert.deepEqual(Buffer.from(await ranged.arrayBuffer()), content.subarray(0, 6));
     const invalid = await fetch(url("file"), { headers: { ...headers, Range: "bytes=999-" } }); assert.equal(invalid.status, 416); assert.equal(invalid.headers.get("content-range"), `bytes */${content.length}`);
-    assert.equal((await fetch("http://127.0.0.1:4317/api/file?path=~/.ssh/id_ed25519", { headers })).status, 403);
+    assert.equal((await fetch(`${BASE_URL}/api/file?path=~/.ssh/id_ed25519`, { headers })).status, 403);
     assert.equal((await fetch(url("file", huge), { headers })).status, 413);
     assert.equal((await (await fetch(url("file-info", huge), { headers })).json()).tooLarge, true);
     assert.ok(Array.isArray((await (await fetch(url("tree"), { headers })).json()).entries));
-    for (const api of ["open", "reveal"]) assert.equal((await fetch(`http://127.0.0.1:4317/api/${api}`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ cwd: root, path }) })).status, 200);
+    for (const api of ["open", "reveal"]) assert.equal((await fetch(`${BASE_URL}/api/${api}`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ cwd: root, path }) })).status, 200);
     assert.deepEqual(launched, [{ path, reveal: false }, { path, reveal: true }]);
     await assert.rejects(new OfficePreview().convert({ path: "fixture.xlsx", size: 1, mtimeMs: 1 }), /不需要/);
     assert.equal((await stat(path)).size, content.length);

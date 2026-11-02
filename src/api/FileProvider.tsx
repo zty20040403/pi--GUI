@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { useChat } from "./ChatProvider";
+import { savePreference } from "./storage";
 import { fileInfo, type FileInfo } from "./files";
 import { emptyFileProject, fileReducer, readFileTabs, type FileProject } from "./file-state";
 import type { WireRecord } from "./types";
@@ -21,7 +22,7 @@ export function FileProvider({ children }: { children: ReactNode }) {
     catch (error) { setError(errorInfo(error)); }
   }, []);
   useEffect(() => { try { sessionStorage.setItem("pi-desk.file-tabs", JSON.stringify(state)); } catch {} }, [state]);
-  useEffect(() => { try { localStorage.setItem("pi-desk.file-layout", JSON.stringify(layout)); } catch {} }, [layout]);
+  useEffect(() => { try { savePreference("pi-desk.file-layout", JSON.stringify(layout)); } catch {} }, [layout]);
   useEffect(() => {
     const query = matchMedia("(max-width:1100px)"); const change = () => { if (query.matches) setLayout((value) => ({ ...value, shown: false })); };
     query.addEventListener("change", change); return () => query.removeEventListener("change", change);

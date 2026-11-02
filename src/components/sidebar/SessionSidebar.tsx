@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronRight, Ellipsis, FolderClosed, FolderInput, FolderPlus, FolderX, House, PanelLeft, Pencil, Plus, Puzzle, RefreshCw, Search, Settings, SquarePen, Trash2 } from "lucide-react";
 import { useChat } from "../../api/ChatProvider";
 import { blocksOf } from "../../api/state";
+import { savePreference } from "../../api/storage";
 import { displayTitle, filterProjects, projectGroups } from "../../api/projects";
 import type { SessionDialogRequest } from "../dialogs/SessionDialog";
 import { ErrorContent } from "../ui/ErrorContent";
@@ -36,7 +37,7 @@ export function SessionSidebar({ hidden, onDialog, onClose, onSettings, onPlugin
   }
   const isRunning = (path: string) => !!running[path] || path === state.session.sessionFile && state.busy;
   function fold(cwd: string) {
-    setFolded((rows) => { const next = rows.includes(cwd) ? rows.filter((path) => path !== cwd) : [...rows, cwd]; try { localStorage.setItem("pi-desk.groups", JSON.stringify(next)); } catch {} return next; });
+    setFolded((rows) => { const next = rows.includes(cwd) ? rows.filter((path) => path !== cwd) : [...rows, cwd]; try { savePreference("pi-desk.groups", JSON.stringify(next)); } catch {} return next; });
   }
   const closeMenu = (element: HTMLElement) => element.closest("details")?.removeAttribute("open");
   return <aside className="session-sidebar" hidden={hidden} aria-label="项目和对话列表">

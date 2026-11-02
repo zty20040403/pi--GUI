@@ -3,6 +3,7 @@ import { cp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { promisify } from "node:util";
 import { build } from "esbuild";
+import { packageEngine } from "./package-engine.js";
 const root = resolve("."); const staging = resolve(".pi-desk/desktop-app"); const runtime = resolve(".pi-desk/desktop-runtime");
 // 只清理两处明确的构建缓存，绝不触碰用户项目/对话；清理仍用废纸篓。
 for (const path of [staging, runtime]) {
@@ -20,4 +21,5 @@ for (const name of ["desk-session-map.ts", "desk-changes.ts"]) await build({ ent
 await build({ entryPoints: [join(root, "server/index.ts")], outfile: join(runtime, "server/index.mjs"), bundle: true, platform: "node", format: "esm", target: "node22", sourcemap: false,
   banner: { js: 'import { createRequire as deskCreateRequire } from "node:module"; const require = deskCreateRequire(import.meta.url);' },
 });
-console.log("桌面运行资源已生成：独立后台、网页和权限扩展；不打包用户 Node/pi 或配置。");
+await packageEngine(root, join(runtime, "engine"));
+console.log("桌面运行资源已生成：后台、网页、App 扩展及内置 pi；不包含用户配置。");

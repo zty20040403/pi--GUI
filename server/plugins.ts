@@ -45,6 +45,7 @@ export class PluginService {
     const entries = await pluginInventory(this.settings.agentDir, snapshot.data, paths, this.piVersion);
     return this.cache = { revision: snapshot.revision, until: Date.now() + 30000, entries, warning };
   }
+  invalidate() { this.cache = undefined; this.piVersion = undefined; this.intents.clear(); }
   status() { return { job: this.job, needsReload: this.needsReload, reload: this.reloadState }; }
   async list(force = false): Promise<PluginSnapshot> { const result = await this.inventory(await this.settings.snapshot(), force); return { ...this.status(), items: result.entries.map((entry) => entry.item), warning: result.warning }; }
   async updates(): Promise<{ items: PluginUpdate[]; unavailable: string[] }> {

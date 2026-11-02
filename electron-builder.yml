@@ -1,24 +1,49 @@
+# 安装包布局参考 pi-gui (MIT) apps/desktop/electron-builder.yml，见 docs/licenses/pi-gui-MIT.txt。
 appId: io.pi-desk.desktop
 productName: pi desk
-electronVersion: 35.7.5
+electronVersion: 44.10.1
 asar: true
 npmRebuild: false
 directories:
   app: .pi-desk/desktop-app
   output: release
+  buildResources: electron/resources
 files:
   - electron/main.cjs
   - electron/preload.cjs
   - electron/runtime.cjs
+  - electron/menu.cjs
+  - electron/resources/icon.png
   - package.json
   - licenses/**/*
   - '!node_modules/**/*'
 extraResources:
   - from: .pi-desk/desktop-runtime
     to: runtime
+artifactName: ${productName}-${version}-${arch}.${ext}
 mac:
-  identity: null
+  identity: '-'
+  hardenedRuntime: false
+  notarize: false
+  icon: electron/resources/icon.icns
+  darkModeSupport: true
   category: public.app-category.developer-tools
   target:
-    - target: dir
+    - target: dmg
       arch: arm64
+    - target: zip
+      arch: arm64
+dmg:
+  sign: false
+  title: pi desk
+  contents:
+    - x: 140
+      y: 180
+      type: file
+    - x: 400
+      y: 180
+      type: link
+      path: /Applications
+  window:
+    width: 540
+    height: 360

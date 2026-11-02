@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BellOff, RotateCw, Settings, X } from "lucide-react";
 import { useExtensionUi } from "../../api/ExtensionUiProvider";
 import { ErrorContent } from "../ui/ErrorContent";
+import { EngineSettings } from "./EngineSettings";
 import { errorInfo, type ErrorValue } from "../../../shared/errors";
 export function SettingsDialog({ close }: { close: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null); const ui = useExtensionUi(); const [loading, setLoading] = useState(true); const [pending, setPending] = useState<string>(); const [error, setError] = useState<ErrorValue>("");
@@ -13,6 +14,7 @@ export function SettingsDialog({ close }: { close: () => void }) {
   async function restore(id: string) { setPending(id); setError(""); try { await ui.restore(id); } catch (error) { setError(errorInfo(error)); } finally { setPending(undefined); } }
   return <dialog ref={dialog} className="session-dialog settings-dialog" aria-labelledby="app-settings-title" onCancel={(event) => { if (pending) event.preventDefault(); else close(); }}>
     <header><h2 id="app-settings-title"><Settings size={16} aria-hidden />设置</h2><button className="icon-button" aria-label="关闭设置" disabled={!!pending} onClick={close}><X size={16} /></button></header>
+    <EngineSettings pending={pending === "engine"} setPending={(value) => setPending(value ? "engine" : undefined)} />
     <h3><BellOff size={14} aria-hidden />已隐藏的提醒</h3>
     <p className="muted">这里只隐藏插件通知，不影响审批弹窗、工具执行或聊天错误。恢复后，下一次同类通知会正常显示。</p>
     {error && <div role="alert" className="error-text"><ErrorContent error={error} /></div>}

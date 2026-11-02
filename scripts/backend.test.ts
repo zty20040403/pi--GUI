@@ -9,7 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import { WebSocket } from "ws";
-import { BASE_URL, DeskAuth } from "../server/auth.js";
+import { BASE_URL, PORT, DeskAuth } from "../server/auth.js";
 import { createDeskServer } from "../server/index.js";
 import { PiPool } from "../server/pi-pool.js";
 import { PiProcess, piEnvironment } from "../server/pi-process.js";
@@ -34,16 +34,16 @@ test("随机口令、HTTP Host/Bearer 和 WS Host/Origin/query 校验", () => {
   const auth = new DeskAuth(true);
   assert.match(auth.token, /^[a-f0-9]{64}$/);
   assert.notEqual(auth.token, new DeskAuth().token);
-  const valid = { host: "127.0.0.1:4317", authorization: `Bearer ${auth.token}` };
+  const valid = { host: `127.0.0.1:${PORT}`, authorization: `Bearer ${auth.token}` };
   assert.ok(auth.checkHttp(request(valid)));
-  assert.ok(auth.checkHttp(request({ ...valid, host: "localhost:4317" })));
+  assert.ok(auth.checkHttp(request({ ...valid, host: `localhost:${PORT}` })));
   for (const host of ["evil.invalid:4317", "127.0.0.1:5173", "127.0.0.1", "localhost:4317.evil.invalid", undefined]) {
     assert.equal(auth.checkHttp(request({ ...valid, host })), false);
   }
   for (const authorization of [undefined, "", "Bearer wrong", `Basic ${auth.token}`, `Bearer ${"汉".repeat(64)}`]) {
     assert.equal(auth.checkHttp(request({ ...valid, authorization })), false);
   }
-  for (const origin of [BASE_URL, "http://localhost:4317", "http://127.0.0.1:5173", "http://localhost:5173"]) {
+  for (const origin of [BASE_URL, `http://localhost:${PORT}`, "http://127.0.0.1:5173", "http://localhost:5173"]) {
     assert.ok(auth.checkWs(request({ ...valid, origin }, `/ws?token=${auth.token}`)));
   }
   for (const origin of [undefined, "null", "http://evil.invalid", "http://127.0.0.1:5173.evil.invalid"]) {
@@ -186,7 +186,7 @@ test("真实 HTTP/WS 转发、广播、UI 回答、非法请求和生产静态�
   let b: DeskClient | undefined;
   try {
     await desk.listen();
-    assert.deepEqual(desk.server.address(), { address: "127.0.0.1", family: "IPv4", port: 4317 });
+    assert.deepEqual(desk.server.address(), { address: "127.0.0.1", family: "IPv4", port: PORT });
     assert.equal((await fetch(`${BASE_URL}/api/projects`)).status, 401);
     assert.equal((await fetch(`${BASE_URL}/api/health`)).status, 401);
     const headers = { Authorization: `Bearer ${desk.auth.token}` };
@@ -201,8 +201,8 @@ test("真实 HTTP/WS 转发、广播、UI 回答、非法请求和生产静态�
     assert.equal(invalidHostStatus, 401);
     assert.equal((await fetch(`${BASE_URL}/api/unknown`, { headers })).status, 404);
     assert.equal((await fetch(`${BASE_URL}/api/health`, { headers, method: "POST" })).status, 405);
-    assert.equal(await rejectedWs("ws://127.0.0.1:4317/ws", BASE_URL), 401);
-    const url = `ws://127.0.0.1:4317/ws?token=${desk.auth.token}`;
+    assert.equal(await rejectedWs(`ws://127.0.0.1:${PORT}/ws`, BASE_URL), 401);
+    const url = `ws://127.0.0.1:${PORT}/ws?token=${desk.auth.token}`;
     assert.equal(await rejectedWs(url, "http://evil.invalid"), 401);
     assert.equal(await rejectedWs(url), 401);
     assert.equal(await rejectedWs(url, BASE_URL, "evil.invalid:4317"), 401);

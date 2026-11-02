@@ -8,9 +8,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
-import { BASE_URL, DeskAuth, HOST, PORT } from "./auth.js";
+import { DeskAuth, HOST, PORT } from "./auth.js";
 import { PiPool } from "./pi-pool.js";
-import { sequenceOf, type PiProcess, type RpcRecord } from "./pi-process.js";
+import { sequenceOf, PiProcess, type RpcRecord } from "./pi-process.js";
 import { checkSessionPath, invalidateSession, listProjects, savedSession, SESSIONS_DIR } from "./sessions.js";
 import { checkDirectory } from "./directories.js";
 import { HttpError, readJson } from "./http.js";
@@ -33,6 +33,9 @@ import { PluginService, type PluginServiceOptions } from "./plugins.js";
 import { ChangeService } from "./changes.js";
 import { ChangeStore } from "./change-store.js";
 import { CHANGES_STATUS } from "../shared/changes.js";
+import { EngineManager } from "./engine.js";
+import { engineMode } from "../shared/engine.js";
+import { pluginRunner } from "./plugin-command.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKSPACE = process.env.PI_DESK_WORKSPACE || ROOT;
@@ -51,15 +54,19 @@ function dataOf(response: RpcRecord): ObjectRecord {
   return isObject(response.data) ? response.data : {};
 }
 
-export type ServerOptions = { pluginOptions?: Omit<PluginServiceOptions, "reload" | "appSettings">; pool?: PiPool; development?: boolean; distDir?: string; sessionsDir?: string; syncOptions?: SyncOptions; appSettings?: AppSettings; trash?: (path: string) => Promise<void>; systemOpen?: (path: string, reveal: boolean) => Promise<void> };
+export type ServerOptions = { port?: number; engine?: EngineManager; pluginOptions?: Omit<PluginServiceOptions, "reload" | "appSettings">; pool?: PiPool; development?: boolean; distDir?: string; sessionsDir?: string; syncOptions?: SyncOptions; appSettings?: AppSettings; trash?: (path: string) => Promise<void>; systemOpen?: (path: string, reveal: boolean) => Promise<void> };
 
 export function createDeskServer(options: ServerOptions = {}) {
   const development = options.development ?? process.env.NODE_ENV !== "production";
-  const auth = new DeskAuth(development);
+  const port = options.port ?? (process.env.PI_DESK_PORT === "0" ? 0 : PORT);
+  const auth = new DeskAuth(development, port);
   const settings = options.appSettings ?? new AppSettings();
   const notices = new NoticeFilter(settings);
   const sessionsDir = options.sessionsDir ?? SESSIONS_DIR;
-  const pool = options.pool ?? new PiPool({ processEnv: { PI_DESK_APP_SETTINGS_FILE: settings.path, PI_SESSIONS_DIR: sessionsDir } });
+  const engine: EngineManager = options.engine ?? new EngineManager(settings);
+  const pool = options.pool ?? new PiPool({ createProcess: (cwd, args) => {
+    const command = engine.command(); return new PiProcess(cwd, { binary: command.binary, args: [...command.args, ...args], env: { ...command.env, PI_DESK_APP_SETTINGS_FILE: settings.path, PI_SESSIONS_DIR: sessionsDir } });
+  } });
   const distDir = options.distDir ?? resolve(ROOT, "dist");
   const wsServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
   const opening = new Map<string, Promise<void>>();
@@ -76,7 +83,9 @@ export function createDeskServer(options: ServerOptions = {}) {
   let pluginReloadInProgress = false;
   let pluginReloadPhase: "waiting" | "loading" = "waiting";
   let activeRpcRequests = 0;
-  const plugins = new PluginService({ ...options.pluginOptions, appSettings: settings, reload: reloadPlugins });
+  const plugins = new PluginService({ ...options.pluginOptions, run: options.pluginOptions?.run ?? (async (args, options) => {
+    await engine.initialize(); const command = engine.command(); return pluginRunner(command.binary, command.env, command.args)(args, options);
+  }), appSettings: settings, reload: reloadPlugins });
   const systemOpen = options.systemOpen ?? (async (path: string, reveal: boolean) => {
     try { await promisify(execFile)("open", [...(reveal ? ["-R"] : []), path], { timeout: 10000 }); }
     catch { throw new HttpError(500, "系统打开失败，请确认 macOS 可用"); }
@@ -120,9 +129,22 @@ export function createDeskServer(options: ServerOptions = {}) {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
     if (!auth.checkStatic(req)) return json(res, 401, { error: "未授权" });
-    const url = new URL(req.url ?? "/", BASE_URL);
+    const url = new URL(req.url ?? "/", auth.origin);
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       if (!auth.checkHttp(req)) return json(res, 401, { error: "未授权" });
+      if (url.pathname === "/api/engine") {
+        await engine.initialize();
+        if (req.method === "GET") return json(res, 200, { ...engine.status(), switching: pluginReloadInProgress });
+        if (req.method !== "POST") throw new HttpError(405, "不支持这个引擎设置方法");
+        if (!auth.checkUserAction(req)) throw new HttpError(403, "请在设置页手动切换 pi 引擎");
+        if (options.pool && !options.engine) throw new HttpError(409, "当前后台由外部程序指定引擎，请在该程序中修改。");
+        const body = await readJson(req); if (!engineMode(body.mode)) throw new HttpError(400, "引擎选项不正确"); engine.requireAvailable(body.mode);
+        if (pluginReloadInProgress || plugins.status().job?.status === "running" || !pool.idle || opening.size || activeRpcRequests) throw new HttpError(409, "请等待所有项目回复、插件问题及插件操作结束后再切换引擎。");
+        const previous = engine.status().mode;
+        try { await reloadPlugins(() => {}, new AbortController().signal, { apply: () => engine.select(body.mode), rollback: () => engine.select(previous) }); }
+        finally { plugins.invalidate(); }
+        return json(res, 200, engine.status());
+      }
       if (req.method === "GET" && url.pathname === "/api/changes") return json(res, 200, await changes.index(url.searchParams.get("cwd"), url.searchParams.get("sessionId")));
       if (req.method === "GET" && url.pathname === "/api/changes/review") {
         const review = await changes.review(url.searchParams.get("cwd"), url.searchParams.get("sessionId"), url.searchParams.get("scope"), url.searchParams.get("turnId") ?? undefined, url.searchParams.get("toolId") ?? undefined);
@@ -130,6 +152,7 @@ export function createDeskServer(options: ServerOptions = {}) {
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }); res.end(JSON.stringify(review)); return;
       }
       if (url.pathname.startsWith("/api/plugins")) {
+        if (pluginReloadInProgress && req.method === "POST" && url.pathname !== "/api/plugins/cancel-reload") throw new HttpError(409, "pi 正在重新加载，请等待完成后再管理插件");
         if (req.method === "GET" && url.pathname === "/api/plugins") return json(res, 200, await plugins.list(url.searchParams.get("refresh") === "1"));
         if (req.method === "GET" && url.pathname === "/api/plugins/status") return json(res, 200, plugins.status());
         if (req.method === "GET" && url.pathname === "/api/plugins/search") return json(res, 200, await plugins.catalog.search(url.searchParams.get("q") ?? ""));
@@ -209,7 +232,8 @@ export function createDeskServer(options: ServerOptions = {}) {
         } finally { deleting.delete(session.path); }
       }
       if (req.method !== "GET") return json(res, 405, { error: "不支持这个方法" });
-      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 10, processes: pool.size });
+      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 11, processes: pool.size });
+      if (url.pathname === "/api/activity") return json(res, 200, { working: !pool.idle || opening.size > 0 || activeRpcRequests > 0 || pluginReloadInProgress || plugins.status().job?.status === "running" });
       if (url.pathname === "/api/projects") {
         const projects = await listProjects(sessionsDir, await settings.mappings()); sync.watchProjects(projects.map((project) => project.cwd));
         return json(res, 200, { projects, activity: pool.activity });
@@ -259,7 +283,7 @@ export function createDeskServer(options: ServerOptions = {}) {
     if (status !== `${requestId}:ok` || dataOf(await pi.request({ type: "get_state" })).sessionFile !== path) throw new HttpError(500, "pi 未能使用重新指定的文件夹打开对话；没有改写原对话，请查看详情或重试。");
     return { type: "response", success: true, data: { cancelled: false } };
   }
-  async function reloadPlugins(status: (state: "waiting" | "loading") => void, signal: AbortSignal) {
+  async function reloadPlugins(status: (state: "waiting" | "loading") => void, signal: AbortSignal, transition?: { apply: () => Promise<void>; rollback: () => Promise<void> }) {
     pluginReloadInProgress = true; pluginReloadPhase = "waiting"; let restarted = false;
     broadcast({ op: "plugins_reload", state: "waiting" });
     try {
@@ -278,7 +302,7 @@ export function createDeskServer(options: ServerOptions = {}) {
             if (typeof model?.provider === "string" && typeof model.id === "string") dataOf(await pi.request({ type: "set_model", provider: model.provider, modelId: model.id }));
             if (typeof state.thinkingLevel === "string") dataOf(await pi.request({ type: "set_thinking_level", level: state.thinkingLevel }));
             await pi.request({ type: "get_state" }); await sync.track(pi, true);
-          });
+          }, transition);
           break;
         } catch (error) {
           if (!restarted && error instanceof HttpError && error.status === 409) { pluginReloadPhase = "waiting"; status("waiting"); broadcast({ op: "plugins_reload", state: "waiting" }); await delay(200); continue; }
@@ -428,10 +452,11 @@ export function createDeskServer(options: ServerOptions = {}) {
   return {
     server, auth, pool, plugins,
     async listen() {
+      if (!options.pool) await engine.initialize();
       await notices.load();
       await new Promise<void>((done, reject) => {
         server.once("error", reject);
-        server.listen(PORT, HOST, () => { server.off("error", reject); sync.start(); done(); });
+        server.listen(port, HOST, () => { auth.bindPort((server.address() as { port: number }).port); server.off("error", reject); sync.start(); done(); });
       });
     },
     async close() {

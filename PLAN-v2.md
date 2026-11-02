@@ -233,6 +233,8 @@ git clone --depth 1 https://github.com/minghinmatthewlam/pi-gui.git refs/pi-gui
 
 ### 第 11 阶段：打包成真正的 App（macOS）
 
+已完成并实际验收；安装拖动、启动台/Spotlight/Dock、系统快捷键和原生退出提醒由 Kenneth 手动确认通过。记录与自动化边界见 [`docs/phase-11-verification.md`](docs/phase-11-verification.md)。
+
 **11.1 不再依赖系统里的 Node**
 - 后台用 Electron 自带的 Node 运行：`spawn(process.execPath, [后台入口], { env: { ...env, ELECTRON_RUN_AS_NODE: "1" } })`（DeepSeek Harness 和 pi-gui 都这样做）。
 - 后台打包成单个 `server.mjs`（esbuild，已有 `scripts/build-desktop.ts`，检查一遍）。
@@ -256,14 +258,14 @@ git clone --depth 1 https://github.com/minghinmatthewlam/pi-gui.git refs/pi-gui
 - **菜单栏**：中文菜单（关于 pi desk、设置 ⌘,、新对话 ⌘N、关闭窗口 ⌘W、退出 ⌘Q、编辑菜单的复制粘贴、视图菜单的放大缩小）。
 - **关窗口**：关最后一个窗口不退出（macOS 习惯），点 Dock 图标重新打开；⌘Q 才真正退出，退出前如果有对话正在回复要提醒。
 - **安装包**：`electron-builder` 产出 `.dmg`（打开后把图标拖进"应用程序"）和 `.zip`；Apple 芯片版。没有 Apple 开发者账号，所以做"本机临时签名"（ad-hoc），并在 README 写明第一次打开要右键→打开。
-- **升级 Electron** 到当前维护中的大版本（先 `npm view electron versions` 选一个发布超过两周的稳定版，固定版本），顺便处理 README 里那些高危依赖告警。
+- **升级 Electron** 到当前维护中的大版本（原要求选发布超过两周的稳定版）。Kenneth 已明确批准安全修复例外：固定 Electron **44.10.1**（补丁未满两周）、Vite **7.3.7**（跨大版本），pi 保持 **1.4.0**；需真实 RPC、聊天、预览和桌面回归。当前审计 0 high / 0 critical，仍有 22 moderate。
 
 **验收**
-- [ ] 在一台"没装 Node"的环境里也能跑：临时把 PATH 里的 node 去掉（`env -i HOME=$HOME PATH=/usr/bin:/bin open "/Applications/pi desk.app"`），App 正常打开、聊天。
-- [ ] 4317 被 `npm start` 占着时，双击 App 也能正常打开。
-- [ ] 拖进"应用程序"后，从启动台、Spotlight、Dock 都能打开；图标正确。
-- [ ] 设置页能看到"pi 引擎：系统（1.4.0）"，切到"内置"后也能聊天。
-- [ ] 第 6 阶段的桌面验收更新后通过。
+- [x] 在 PATH 不含系统 node 的环境正常打开、聊天：开发/打包版系统和内置引擎均通过；安装副本也通过最小 HOME/PATH 环境调用 macOS `open` 的真实验收。
+- [x] 4317 被 `npm start` 占着时，App 正常打开；包括 macOS LaunchServices 实际启动安装副本。
+- [x] 拖进"应用程序"后，从启动台、Spotlight、Dock 都能打开；图标正确。（镜像、解压、签名和图标自动验证；实际拖动、三个系统入口及原生快捷键由 Kenneth 确认。）
+- [x] 设置页能看到"pi 引擎：系统（1.4.0）"，切到"内置"后也能聊天。
+- [x] 第 6 阶段的桌面验收更新后通过，含真实退出重开后恢复改动卡片与 diff。
 
 ### 第 12 阶段：Windows 版（本地运行，不连 Mac）
 

@@ -36,7 +36,7 @@ async function main() {
     await client.rpc(f.cwd, { type: "prompt", message: changePrompt }); await settled;
     assert.equal(await readFile(join(f.cwd, "src/math.ts"), "utf8"), f.before.replace("answer = 1", "answer = 42")); assert.equal(await readFile(join(f.cwd, "notes.md"), "utf8"), "# Notes\n\nStatus: ready\n"); assert.equal(await readFile(join(f.cwd, "src/created.ts"), "utf8"), "export const created = true;\nexport const version = 1;\n");
     const state = await client.rpc(f.cwd, { type: "get_state" }); const params = new URLSearchParams({ cwd: f.cwd, sessionId: state.sessionId });
-    const get = async (suffix: string) => { const res = await fetch(`http://127.0.0.1:4317${suffix}`, { headers: { Authorization: `Bearer ${desk.auth.token}` } }); assert.equal(res.status, 200); return res.json(); };
+    const get = async (suffix: string) => { const res = await fetch(`${desk.auth.origin}${suffix}`, { headers: { Authorization: `Bearer ${desk.auth.token}` } }); assert.equal(res.status, 200); return res.json(); };
     const index = await get(`/api/changes?${params}`); assert.equal(index.turns.length, 1); const turn = index.turns[0]; assert.equal(turn.status, "completed"); assert.equal(turn.files.length, 3);
     assert.deepEqual(turn.files.map((file: any) => [file.path, file.added, file.removed]), [["notes.md", 1, 1], ["src/created.ts", 2, 0], ["src/math.ts", 1, 1]]);
     assert.ok(records.some((row) => row.op === "changes_changed")); assert.ok(!records.some((row) => row.record?.type === "extension_error"));

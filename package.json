@@ -12,7 +12,9 @@
     "postinstall": "node electron/install.cjs",
     "desktop:install": "node electron/install.cjs",
     "desktop": "electron .",
-    "desktop:build": "npm run build && tsx scripts/build-desktop.ts && electron-builder --config electron-builder.yml --mac --arm64 --dir",
+    "desktop:icons": "tsx scripts/build-icons.ts",
+    "desktop:dist": "tsx scripts/build-mac.ts --dist",
+    "desktop:build": "tsx scripts/build-mac.ts",
     "test:desktop": "tsx --test scripts/desktop.test.ts",
     "verify:phase6": "tsx scripts/verify-phase6.ts",
     "verify:phase7": "tsx scripts/verify-phase7.ts && tsx scripts/verify-phase7-errors.ts",
@@ -20,8 +22,12 @@
     "verify:phase9": "tsx scripts/verify-phase9-ui.ts && tsx scripts/verify-phase9-real.ts",
     "verify:phase10": "tsx scripts/verify-phase10.ts",
     "verify:phase10:capture": "tsx scripts/verify-phase10-capture.ts",
+    "verify:phase11:engine": "tsx scripts/verify-phase11-engine.ts",
+    "verify:phase11:ports": "tsx scripts/verify-phase11-ports.ts",
+    "verify:phase11:native": "tsx scripts/verify-phase11-native.ts",
+    "verify:phase11:package": "tsx scripts/verify-phase11-package.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test --test-concurrency=1 scripts/backend.test.ts scripts/chat.test.ts scripts/session-actions.test.ts scripts/session-sync.test.ts scripts/project-mapping.test.ts scripts/errors.test.ts scripts/notices.test.ts scripts/plugins.test.ts scripts/plugins-http.test.ts scripts/changes.test.ts scripts/diff-view.test.ts scripts/project-list.test.ts scripts/files.test.ts scripts/preview.test.ts scripts/uploads.test.ts scripts/attachments.test.ts scripts/extensions.test.ts scripts/test-permissions.ts",
+    "test": "tsx --test --test-concurrency=1 scripts/backend.test.ts scripts/chat.test.ts scripts/session-actions.test.ts scripts/session-sync.test.ts scripts/project-mapping.test.ts scripts/errors.test.ts scripts/notices.test.ts scripts/plugins.test.ts scripts/plugins-http.test.ts scripts/engine.test.ts scripts/ports.test.ts scripts/changes.test.ts scripts/diff-view.test.ts scripts/project-list.test.ts scripts/files.test.ts scripts/preview.test.ts scripts/uploads.test.ts scripts/attachments.test.ts scripts/extensions.test.ts scripts/test-permissions.ts",
     "smoke": "tsx scripts/smoke.ts",
     "verify:phase1": "tsx scripts/verify-phase1.ts",
     "verify:phase2": "tsx scripts/verify-phase2.ts",
@@ -32,6 +38,7 @@
     "fixtures": "tsx scripts/make-fixtures.ts"
   },
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
     "diff": "8.0.4",
     "dompurify": "3.4.17",
     "exceljs": "4.4.0",
@@ -53,24 +60,24 @@
     "ws": "8.22.1"
   },
   "overrides": {
-    "katex": "$katex"
+    "katex": "$katex",
+    "undici@>=8.0.0 <8.12.2": "8.12.2"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "1.4.0",
     "@playwright/test": "1.64.1",
-    "@types/node": "22.10.1",
+    "@types/node": "22.19.19",
     "@types/papaparse": "5.3.16",
     "@types/proper-lockfile": "4.1.4",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "@types/semver": "7.7.1",
     "@types/ws": "8.5.13",
-    "@vitejs/plugin-react": "4.3.4",
+    "@vitejs/plugin-react": "4.7.0",
     "concurrently": "9.1.0",
-    "electron": "35.7.5",
+    "electron": "44.10.1",
     "electron-builder": "26.18.0",
     "esbuild": "0.28.2",
     "typescript": "5.6.3",
-    "vite": "5.4.21"
+    "vite": "7.3.7"
   }
 }

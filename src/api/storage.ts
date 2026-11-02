@@ -2,6 +2,14 @@ import type { Target } from "./types";
 import { DeskError } from "../../shared/errors";
 export const TOKEN_KEY = "pi-desk.token";
 export const SESSION_KEY = "pi-desk.session";
+export function savePreference(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch {}
+  void window.piDeskDesktop?.savePreference(key, value).catch(() => {});
+}
+export async function restoreDesktopPreferences() {
+  if (!window.piDeskDesktop) return;
+  try { const values = await window.piDeskDesktop.loadPreferences(); for (const key of ["pi-desk.layout", "pi-desk.file-layout", "pi-desk.groups", "pi-desk.projects"]) if (typeof values[key] === "string") localStorage.setItem(key, values[key]); } catch {}
+}
 export function consumeToken(url: URL, storage: Storage, replaceUrl: (url: string) => void): string {
   const supplied = url.searchParams.get("token");
   if (supplied) storage.setItem(TOKEN_KEY, supplied);

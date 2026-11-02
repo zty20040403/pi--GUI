@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- pi desk：沿用深色主题的中性灰与白色；路径化 π，不依赖系统字体。 -->
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#262626"/>
+      <stop offset="1" stop-color="#161616"/>
+    </linearGradient>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity=".22"/>
+    </filter>
+  </defs>
+  <rect x="96" y="96" width="832" height="832" rx="200" fill="url(#surface)" filter="url(#shadow)"/>
+  <rect x="97" y="97" width="830" height="830" rx="199" fill="none" stroke="#ffffff" stroke-opacity=".08" stroke-width="2"/>
+  <path transform="translate(-16 -24)" fill="#ffffff" d="M284 377C302 335 334 316 385 316H754L736 395H655V662C655 693 665 710 685 710C705 710 721 695 739 671L770 696C744 752 706 779 660 779C602 779 574 740 574 670V395H464C459 562 442 689 414 765H332C365 656 381 534 384 395H359C331 395 316 403 298 421Z"/>
+</svg>

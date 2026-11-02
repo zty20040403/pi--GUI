@@ -3,7 +3,7 @@ import { RpcClient } from "./client";
 import { errorInfo, type ErrorValue } from "../../shared/errors";
 import type { AttachmentRef } from "./attachments";
 import { initialState, reducer, type ChatState } from "./state";
-import { http, savedTarget, SESSION_KEY } from "./storage";
+import { http, savedTarget, SESSION_KEY, savePreference } from "./storage";
 import { readRecents, RECENTS_KEY, rememberProject } from "./projects";
 import type { Activity, Project, RecentProject, SessionState, SessionSummary, Stats, Target, WireRecord } from "./types";
 
@@ -53,7 +53,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
     const report = (error: unknown) => { if (active) dispatch({ type: "error", value: errorInfo(error) }); };
     const visit = (path: string) => setRecents((rows) => {
       const next = rememberProject(rows, path);
-      try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); } catch {}
+      try { savePreference(RECENTS_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
     refreshProjects.current = async () => {
@@ -192,7 +192,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
   async function relocateProject(cwd: string, path: string) {
     const session = unavailable?.cwd === cwd ? unavailable : projects.find((project) => project.cwd === cwd)?.sessions[0];
     const target = await http<Target>("/api/projects/relocate", token, { cwd, path });
-    setRecents((rows) => { const next = rows.filter((row) => row.cwd !== cwd); try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); } catch {} return next; });
+    setRecents((rows) => { const next = rows.filter((row) => row.cwd !== cwd); try { savePreference(RECENTS_KEY, JSON.stringify(next)); } catch {} return next; });
     await refreshProjects.current(); await open({ cwd: target.cwd, sessionPath: session?.path });
   }
   return <Context.Provider value={{ subscribeRecords, state, projects, home, recents, running, projectsLoading, projectsError, switching, pluginsReloading,

@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { FolderClosed, PanelLeft, PanelRight, Pause, RotateCw, TriangleAlert, X } from "lucide-react";
 import { useChat } from "./api/ChatProvider";
 import { desktopBridge } from "./api/desktop";
+import { savePreference } from "./api/storage";
 import { useExtensionUi } from "./api/ExtensionUiProvider";
 import { useGoals } from "./api/GoalProvider";
 import { ExtensionDialogs, ExtensionToasts } from "./components/dialogs/ExtensionDialogs";
@@ -34,7 +35,7 @@ export default function App() {
   });
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
-  useEffect(() => { try { localStorage.setItem("pi-desk.layout", JSON.stringify(layout)); } catch {} }, [layout]);
+  useEffect(() => { try { savePreference("pi-desk.layout", JSON.stringify(layout)); } catch {} }, [layout]);
   const viewCwd = unavailable?.cwd ?? state.cwd;
   const project = viewCwd.split("/").filter(Boolean).at(-1) || "项目";
   const firstUser = state.messages.find((message) => message.role === "user");
@@ -49,6 +50,11 @@ export default function App() {
     return () => { clearInterval(timer); document.title = base; };
   }, [title, ui.current.title, ui.pending[0]?.id]);
   const disabled = changing || switching || state.busy || state.compacting || state.connection !== "ready";
+  useEffect(() => desktopBridge()?.onAction((action) => {
+    if (action === "settings") { setSettingsOpen(true); return; }
+    if (disabled || !state.cwd || ui.pending.length) { setError("请先等待当前对话完成、处理插件问题并连接成功，再新建对话。"); return; }
+    setPluginsOpen(false); void configure(() => open({ cwd: state.cwd }));
+  }), [disabled, state.cwd, ui.pending.length, open]);
   async function configure(action: () => Promise<void>) {
     setChanging(true); setError("");
     try { await action(); } catch (error) { setError(errorInfo(error)); } finally { setChanging(false); }
@@ -65,7 +71,7 @@ export default function App() {
   const elapsed = state.waitingSince ? Math.max(0, Math.floor((now - state.waitingSince) / 1000)) : 0;
   const closeSidebar = () => setLayout((value) => ({ ...value, open: false }));
   const toggleSidebar = () => { if (matchMedia("(max-width:1100px)").matches) files.hide(); setLayout((value) => ({ ...value, open: !value.open })); };
-  return <div className={`desk-layout ${pluginsOpen ? "plugins-open" : ""}`} style={{ "--sidebar-width": `${layout.width}px`, "--file-width": `${files.width}px` } as CSSProperties}>
+  return <div className={`desk-layout ${desktopBridge() ? "is-desktop" : ""} ${!layout.open ? "sidebar-hidden" : ""} ${pluginsOpen ? "plugins-open" : ""}`} style={{ "--sidebar-width": `${layout.width}px`, "--file-width": `${files.width}px` } as CSSProperties}>
     <SessionSidebar hidden={!layout.open} onDialog={requestDialog} onClose={closeSidebar} onSettings={() => setSettingsOpen(true)} onPlugins={() => setPluginsOpen(true)} />
     {layout.open && <><button className="sidebar-backdrop" aria-label="关闭对话列表遮罩" onClick={closeSidebar} /><div className="sidebar-resizer" role="separator" aria-label="调整对话列表宽度" aria-orientation="vertical" aria-valuemin={220} aria-valuemax={460} aria-valuenow={layout.width} tabIndex={0}
       onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)} onPointerMove={(event) => {

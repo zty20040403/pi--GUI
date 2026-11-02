@@ -114,10 +114,12 @@ export class PiPool extends EventEmitter {
     }
   }
 
-  async restartIdle(restore: (pi: PiProcess, state: Record<string, unknown>) => Promise<void>): Promise<void> {
+  async restartIdle(restore: (pi: PiProcess, state: Record<string, unknown>) => Promise<void>, transition?: { apply: () => Promise<void>; rollback: () => Promise<void> }): Promise<void> {
     if (this.restarting || !this.idle) throw new HttpError(409, "项目还在回复或等待插件回答");
     this.restarting = true;
-    const saved: { cwd: string; state: Record<string, unknown> }[] = [];
+    const saved: { cwd: string; state: Record<string, unknown> }[] = []; let applied = false;
+    const close = () => Promise.all([...this.processes.values()].map(({ pi }) => { this.expectedExits.add(pi); return pi.dispose(); }));
+    const reopen = async () => { this.restarting = false; for (const row of saved) { const pi = await this.get(row.cwd, typeof row.state.sessionId === "string" ? row.state.sessionId : undefined); await restore(pi, row.state); } };
     try {
       for (const { pi, busy } of this.processes.values()) {
         const response = await pi.request({ type: "get_state" }); const state = response.data as Record<string, unknown> | undefined;
@@ -125,9 +127,17 @@ export class PiPool extends EventEmitter {
         saved.push({ cwd: pi.cwd, state });
       }
       if (!this.idle) throw new HttpError(409, "项目刚开始新的工作，请等待完成");
-      await Promise.all([...this.processes.values()].map(({ pi }) => { this.expectedExits.add(pi); return pi.dispose(); }));
+      await close();
+      if (transition) { applied = true; await transition.apply(); }
+      await reopen();
+    } catch (error) {
+      if (applied && transition) {
+        try { this.restarting = true; await close(); await transition.rollback(); await reopen(); }
+        catch { throw new HttpError(500, "引擎切换失败，自动恢复也未完成。已保存的对话没有删除，请重新选择可用引擎并打开原对话。"); }
+        throw new HttpError(500, "引擎切换失败，已恢复原引擎和对话。请检查所选引擎后重试。");
+      }
+      throw error;
     } finally { this.restarting = false; }
-    for (const row of saved) { const pi = await this.get(row.cwd, typeof row.state.sessionId === "string" ? row.state.sessionId : undefined); await restore(pi, row.state); }
   }
 
   async dispose(): Promise<void> {

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logText } from "../server/privacy.js";
@@ -7,11 +8,12 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // 真实运行 npx tsx server/index.ts，但只在内存里接收口令，不写测试日志。
 export async function startBackend(options: { development?: boolean; production?: boolean; entry?: string; env?: NodeJS.ProcessEnv } = {}) {
-  const child = spawn(options.development ? "npm" : "npx", options.development ? ["run", "dev"] : ["tsx", options.entry ?? "server/index.ts"], {
+  const npmStart = options.production && !options.entry;
+  const child = spawn(options.development || npmStart ? "npm" : "npx", options.development ? ["run", "dev"] : npmStart ? ["start"] : ["tsx", options.entry ?? "server/index.ts"], {
     cwd: ROOT, detached: true, env: { ...process.env, ...options.env, NODE_ENV: options.production ? "production" : "development" }, stdio: ["ignore", "pipe", "pipe"],
   });
   const closed = new Promise<void>((done) => child.once("close", () => done()));
-  let output = "";
+  const { LaunchUrl } = createRequire(import.meta.url)("../electron/runtime.cjs"); const parser = new LaunchUrl();
   let diagnostics = "";
   child.stdout.setEncoding("utf8");
   child.stderr.setEncoding("utf8");
@@ -37,12 +39,10 @@ export async function startBackend(options: { development?: boolean; production?
         if (error) reject(error); else done(value!);
       };
       const onData = (chunk: string) => {
-        output = (output + chunk).slice(-4096);
-        const match = output.match(/http:\/\/127\.0\.0\.1:4317\/\?token=[a-f0-9]{64}/);
-        if (match) finish(undefined, match[0]);
+        try { const url = parser.feed(chunk); if (url) finish(undefined, url); } catch { finish(new Error("后台启动输出异常")); }
       };
       const onError = (error: Error) => finish(error);
-      const onClose = () => finish(new Error(`后台提前退出：${diagnostics || "请确认 4317 端口未被占用"}`));
+      const onClose = () => finish(new Error(`后台提前退出：${diagnostics || "请确认所选端口未被占用"}`));
       child.stdout.on("data", onData);
       child.once("error", onError);
       child.once("close", onClose);
