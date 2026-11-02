@@ -7,7 +7,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 export const SESSIONS_DIR = process.env.PI_SESSIONS_DIR ?? join(homedir(), ".pi/agent/sessions");
 
 export type SessionSummary = { path: string; id: string; cwd: string; title: string; name?: string; mtime: number };
-export type Project = { cwd: string; sessions: SessionSummary[] };
+export type Project = { cwd: string; sessions: SessionSummary[]; missing?: true };
 
 const cache = new Map<string, { mtime: number; summary: SessionSummary | null }>();
 
@@ -78,9 +78,14 @@ export async function listProjects(sessionsDir = SESSIONS_DIR): Promise<Project[
       } catch {} // 文件可能被终端移走，不能让整个列表返回 500。
     }
   }
-  return [...byCwd.entries()]
-    .map(([cwd, sessions]) => ({ cwd, sessions: sessions.sort((a, b) => b.mtime - a.mtime) }))
-    .sort((a, b) => (b.sessions[0]?.mtime ?? 0) - (a.sessions[0]?.mtime ?? 0));
+  // 项目文件夹被删掉或移走时标出来，列表里能提前看到，不用点了才报错。
+  const projects: Project[] = [];
+  for (const [cwd, sessions] of byCwd) {
+    let missing = false;
+    try { missing = !(await stat(cwd)).isDirectory(); } catch { missing = true; }
+    projects.push({ cwd, sessions: sessions.sort((a, b) => b.mtime - a.mtime), ...(missing ? { missing: true as const } : {}) });
+  }
+  return projects.sort((a, b) => (b.sessions[0]?.mtime ?? 0) - (a.sessions[0]?.mtime ?? 0));
 }
 
 // 删除旧项目的对话不要求项目目录仍存在；只信任 sessions 内的普通 JSONL 文件。

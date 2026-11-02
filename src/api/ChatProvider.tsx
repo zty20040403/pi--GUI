@@ -124,7 +124,14 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
     void (async () => {
       const workspace = await http<Target & { home?: string }>("/api/workspace", token);
       if (!active) return;
-      setHome(workspace.home ?? ""); const target = savedTarget(sessionStorage) ?? workspace; cwd = target.cwd;
+      setHome(workspace.home ?? ""); let target = savedTarget(sessionStorage) ?? workspace;
+      // 上次打开的文件夹可能已被删掉（比如测试用的临时目录），那就回到默认项目，而不是一打开就报错。
+      if (target.cwd !== workspace.cwd) {
+        try { await http("/api/check-dir", token, { path: target.cwd }); }
+        catch { sessionStorage.removeItem(SESSION_KEY); target = workspace; }
+        if (!active) return;
+      }
+      cwd = target.cwd;
       rpc.connect(target); void refreshProjects.current();
     })().catch(report);
     return () => { active = false; if (listTimer) clearTimeout(listTimer); unsubscribe(); rpc.dispose(); };

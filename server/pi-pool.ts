@@ -43,7 +43,9 @@ export class PiPool extends EventEmitter {
 
   async get(cwd: string): Promise<PiProcess> {
     if (!isAbsolute(cwd)) throw new Error("项目路径必须是绝对路径");
-    const canonical = await realpath(cwd);
+    let canonical: string;
+    try { canonical = await realpath(cwd); }
+    catch { throw new Error(`这个对话所在的文件夹已经不存在了（可能被删除或移动）：${cwd}。不需要的话，可以在左边对话的 ⋯ 菜单里把它删掉。`); }
     if (!(await stat(canonical)).isDirectory()) throw new Error("项目路径不是文件夹");
     const args: string[] = [];
     const permissionsPath = this.options.permissionsPath ?? resolve(ROOT, "pi-extension", "desk" + "-permissions.ts");

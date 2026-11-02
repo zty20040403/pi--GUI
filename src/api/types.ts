@@ -34,7 +34,7 @@ export type Opened = {
   op: "opened"; cwd: string; state: SessionState; messages: Message[]; stats: Stats; models: Model[]; commands: Command[]; seq?: number; ui?: UiSnapshot; extensions?: ExtensionSessionState;
 };
 export type SessionSummary = { path: string; id: string; cwd: string; title: string; name?: string; mtime: number; virtual?: boolean };
-export type Project = { cwd: string; sessions: SessionSummary[] };
+export type Project = { cwd: string; sessions: SessionSummary[]; missing?: true };
 export type Activity = { cwd: string; sessionPath?: string; busy: boolean };
 export type RecentProject = { cwd: string; openedAt: number };
 export type Target = { cwd: string; sessionPath?: string };

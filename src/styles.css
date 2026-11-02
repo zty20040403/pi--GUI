@@ -176,6 +176,8 @@ input[type=checkbox] { accent-color: var(--accent); padding: 0; }
 .project-toggle strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--text); }
 .project-toggle:disabled { opacity: 1; cursor: default; }
 .home-hint { color: var(--text-3); font-size: 11px; margin: 0 8px 3px 30px; }
+.project-group.missing .project-toggle strong, .project-group.missing .session-open { color: var(--text-3); }
+.missing-hint { color: var(--warning); }
 .project-sessions { padding-left: 14px; }
 .session-row { display: flex; align-items: center; border-radius: var(--r-sm); position: relative; margin: 1px 0; }
 .session-row:hover { background: var(--hover); }

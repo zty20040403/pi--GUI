@@ -11,7 +11,7 @@ export function rememberProject(rows: RecentProject[], cwd: string, now = Date.n
   return [{ cwd, openedAt: now }, ...rows.filter((row) => row.cwd !== cwd)].slice(0, 20);
 }
 export function projectGroups(projects: Project[], recents: RecentProject[], current?: Target & { id: string; title: string; name?: string }): Project[] {
-  const map = new Map(projects.map((project) => [project.cwd, { cwd: project.cwd, sessions: [...project.sessions] }]));
+  const map = new Map<string, Project>(projects.map((project) => [project.cwd, { ...project, sessions: [...project.sessions] }]));
   for (const recent of recents) if (!map.has(recent.cwd)) map.set(recent.cwd, { cwd: recent.cwd, sessions: [] });
   if (current?.cwd && current.sessionPath && !projects.some((project) => project.sessions.some((session) => session.path === current.sessionPath))) {
     const group = map.get(current.cwd) ?? { cwd: current.cwd, sessions: [] };

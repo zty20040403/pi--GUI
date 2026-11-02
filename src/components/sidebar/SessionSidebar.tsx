@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Ellipsis, FolderClosed, FolderPlus, House, PanelLeft, Pencil, Plus, RefreshCw, Search, SquarePen, Trash2 } from "lucide-react";
+import { ChevronRight, Ellipsis, FolderClosed, FolderPlus, FolderX, House, PanelLeft, Pencil, Plus, RefreshCw, Search, SquarePen, Trash2 } from "lucide-react";
 import { useChat } from "../../api/ChatProvider";
 import { blocksOf } from "../../api/state";
 import { displayTitle, filterProjects, projectGroups } from "../../api/projects";
@@ -59,16 +59,17 @@ export function SessionSidebar({ hidden, onDialog, onClose }: { hidden: boolean;
         const working = project.sessions.some((session) => isRunning(session.path));
         const isHome = project.cwd.replace(/\/$/, "") === home.replace(/\/$/, "") && !!home;
         const name = isHome ? "家目录" : project.cwd.split("/").filter(Boolean).at(-1) || "/";
-        const Icon = isHome ? House : FolderClosed;
-        return <section className="project-group" key={project.cwd} data-cwd={project.cwd}>
+        const Icon = isHome ? House : project.missing ? FolderX : FolderClosed;
+        return <section className={`project-group ${project.missing ? "missing" : ""}`} key={project.cwd} data-cwd={project.cwd}>
           <div className="project-heading">
             <button className="project-toggle" aria-label={`折叠项目 ${name}`} aria-expanded={expanded} disabled={!!query.trim()} title={project.cwd} onClick={() => fold(project.cwd)}>
               <ChevronRight size={12} className="chevron" aria-hidden /><Icon size={14} aria-hidden /><strong>{name}</strong>{working && <span className="spinner" />}
             </button>
-            <button className="icon-button small" aria-label={`在项目 ${name} 新建对话`} title="在这个项目新建对话" disabled={switching || working} onClick={() => void choose(project.cwd)}><Plus size={13} /></button>
+            <button className="icon-button small" aria-label={`在项目 ${name} 新建对话`} title="在这个项目新建对话" disabled={switching || working || !!project.missing} onClick={() => void choose(project.cwd)}><Plus size={13} /></button>
           </div>
           {expanded && <>
             {isHome && <p className="home-hint" data-testid="home-memory-hint">在这里没有长期记忆</p>}
+            {project.missing && <p className="home-hint missing-hint" title={project.cwd}>文件夹已不存在，只能删除这里的对话</p>}
             <div className="project-sessions">
               {project.sessions.map((session) => {
                 const title = displayTitle(session); const busy = isRunning(session.path); const active = state.session.sessionFile === session.path;

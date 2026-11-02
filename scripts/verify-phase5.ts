@@ -56,9 +56,16 @@ async function main() {
     };
     // 只在测试临时目录里批准必要操作；绝不自动允许危险标题或任意未知命令。
     const approveFixture = async () => {
-      const text = await dialog(page).innerText();
+      // 点击批准后，后台确认前弹窗仍在 DOM 中，但按钮已禁用。
+      // 原脚本把这个已回答的请求当成新审批，误报（或重复点击）。一次读取同一弹窗的状态。
+      const snapshot = await dialog(page).evaluate((element) => {
+        const allow = [...element.querySelectorAll("button")].find((button) => button.textContent === "允许这一次");
+        return { ready: !!allow && !allow.disabled, text: (element as HTMLElement).innerText, title: element.querySelector("h2")?.innerText ?? "" };
+      });
+      if (!snapshot.ready) return;
+      const { text, title } = snapshot;
       assert.ok(!text.includes("⚠️"), "不能自动允许危险操作");
-      const title = await dialog(page).locator("h2").innerText(); const prefix = "需要你的允许：执行命令\n";
+      const prefix = "需要你的允许：执行命令\n";
       const command = title.startsWith(prefix) ? title.slice(prefix.length).trim() : "";
       const planProbe = /^(?:pwd;\s*)?(?:ls -ld \.;\s*)?if \[ -(?:e|f) (?:\.\/)?hello\.sh \]; then (?:ls -ld?|cat) (?:\.\/)?hello\.sh;\s*(?:else (?:printf|echo) '[^']*';\s*)?fi$/.test(command);
       assert.ok(text.includes(project) || planProbe || /^chmod\s+\+x\s+(?:\.\/)?hello\.sh$/.test(command) || text.includes(".pi-desk/uploads/"), `只允许当前合成项目的操作；待审请求：${logText(text)}`);
