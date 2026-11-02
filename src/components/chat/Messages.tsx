@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDown, Bug, ChevronRight, CircleAlert, FileSearch, FolderClosed, Lightbulb, ListTree, NotebookPen } from "lucide-react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowDown, Bug, ChevronRight, CircleAlert, FileSearch, FolderClosed, History, Lightbulb, ListTree, NotebookPen } from "lucide-react";
 import { blocksOf } from "../../api/state";
 import { useChat } from "../../api/ChatProvider";
 import { Markdown } from "./Markdown";
@@ -7,6 +7,8 @@ import { ToolCard } from "./ToolCard";
 import { MessageImage } from "./MessageImage";
 import { PREFILL_EVENT } from "./Composer";
 import { ErrorContent } from "../ui/ErrorContent";
+import { useChanges } from "../../api/ChangesProvider";
+import { TurnChangesCard } from "../changes/TurnChangesCard";
 
 const SUGGESTIONS = [
   { icon: ListTree, text: "介绍一下这个项目的结构和主要文件" },
@@ -28,7 +30,9 @@ function Welcome({ cwd }: { cwd: string }) {
 }
 
 export function Messages() {
-  const { state } = useChat();
+  const { state } = useChat(); const changes = useChanges();
+  const turns = changes.index.turns.filter((turn) => turn.status !== "running" && (turn.files.length > 0 || turn.warnings.length > 0));
+  const orphaned = turns.filter((turn) => !state.messages.some((message) => message.role === "assistant" && message.timestamp === turn.assistantTimestamp));
   const viewport = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const [jump, setJump] = useState(false);
@@ -52,7 +56,7 @@ export function Messages() {
     {state.messages.map((message) => {
       if (message.role === "system" || message.role === "toolResult" || message.role === "custom" && !message.display) return null;
       const blocks = blocksOf(message);
-      return <article key={message.key} className={`message ${message.role === "user" ? "user-message" : "assistant-message"}`} data-role={message.role} data-stop={message.stopReason}>
+      return <Fragment key={message.key}><article className={`message ${message.role === "user" ? "user-message" : "assistant-message"}`} data-role={message.role} data-stop={message.stopReason}>
         <div className="message-label">{message.role === "user" ? "你" : message.role === "assistant" ? "pi" : "对话记录"}</div>
         {blocks.map((block, index) => {
           if (block.type === "text") return message.role === "user" ? <div key={index} className="user-text">{block.text}</div> : <Markdown key={index} text={block.text ?? ""} />;
@@ -69,9 +73,11 @@ export function Messages() {
         {message.summary && <details className="thinking"><summary><ChevronRight size={12} className="chevron" aria-hidden />上下文摘要</summary><Markdown text={message.summary} /></details>}
         {message.stopReason === "aborted" && <p className="message-aborted">已停止这次回复</p>}
         {message.errorMessage && message.stopReason !== "aborted" && <div className="message-error"><CircleAlert size={14} aria-hidden style={{ marginTop: 2 }} /><ErrorContent error={{ message: message.errorMessage, details: message.errorMessageDetails }} /></div>}
-      </article>;
+      </article>{message.role === "assistant" && turns.filter((turn) => turn.assistantTimestamp === message.timestamp).map((turn) => <TurnChangesCard key={turn.id} turn={turn} />)}</Fragment>;
     })}
     {Object.values(state.tools).filter((tool) => !referenced.has(tool.id)).map((tool) => <ToolCard key={tool.id} tool={tool} />)}
+    {orphaned.length > 0 && <details className="older-changes"><summary><History size={14} aria-hidden />较早轮次的改动（{orphaned.length}）</summary>{orphaned.map((turn) => <TurnChangesCard key={turn.id} turn={turn} />)}</details>}
+    {changes.error && <div className="changes-message-error" role="alert"><ErrorContent error={changes.error} /><button className="quiet-button" onClick={changes.refresh}>重试读取改动</button></div>}
     {state.busy && <div className="working" role="status"><span className="shimmer">{state.compacting ? "正在压缩上下文…" : "pi 正在处理…"}</span></div>}
   </div></div>{jump && <button className="jump-button" aria-label="回到底部 ↓" onClick={() => {
     stick.current = true; setJump(false); viewport.current?.scrollTo({ top: viewport.current.scrollHeight, behavior: "smooth" });

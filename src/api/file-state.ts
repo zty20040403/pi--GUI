@@ -36,7 +36,7 @@ export function readFileTabs(storage: Storage): FileState {
       const project = value as FileProject;
       if (!cwd.startsWith("/") || !Array.isArray(project?.tabs)) continue;
       const tabs = project.tabs.filter((file) => file?.cwd === cwd && typeof file.path === "string" && file.path.startsWith("/") && typeof file.name === "string" && Number.isFinite(file.size) && Number.isFinite(file.mtime));
-      state[cwd] = { ...emptyFileProject(), tabs, active: tabs.some((file) => file.path === project.active) ? project.active : "tree" };
+      state[cwd] = { ...emptyFileProject(), tabs, active: project.active === "changes" || tabs.some((file) => file.path === project.active) ? project.active : "tree" };
     }
     return state;
   } catch { return {}; }

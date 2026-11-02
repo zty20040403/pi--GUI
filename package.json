@@ -18,8 +18,10 @@
     "verify:phase7": "tsx scripts/verify-phase7.ts && tsx scripts/verify-phase7-errors.ts",
     "verify:phase8": "tsx scripts/verify-menu.ts && tsx scripts/verify-phase8.ts && tsx scripts/verify-phase8-pi.ts",
     "verify:phase9": "tsx scripts/verify-phase9-ui.ts && tsx scripts/verify-phase9-real.ts",
+    "verify:phase10": "tsx scripts/verify-phase10.ts",
+    "verify:phase10:capture": "tsx scripts/verify-phase10-capture.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test --test-concurrency=1 scripts/backend.test.ts scripts/chat.test.ts scripts/session-actions.test.ts scripts/session-sync.test.ts scripts/project-mapping.test.ts scripts/errors.test.ts scripts/notices.test.ts scripts/plugins.test.ts scripts/plugins-http.test.ts scripts/project-list.test.ts scripts/files.test.ts scripts/preview.test.ts scripts/uploads.test.ts scripts/attachments.test.ts scripts/extensions.test.ts scripts/test-permissions.ts",
+    "test": "tsx --test --test-concurrency=1 scripts/backend.test.ts scripts/chat.test.ts scripts/session-actions.test.ts scripts/session-sync.test.ts scripts/project-mapping.test.ts scripts/errors.test.ts scripts/notices.test.ts scripts/plugins.test.ts scripts/plugins-http.test.ts scripts/changes.test.ts scripts/diff-view.test.ts scripts/project-list.test.ts scripts/files.test.ts scripts/preview.test.ts scripts/uploads.test.ts scripts/attachments.test.ts scripts/extensions.test.ts scripts/test-permissions.ts",
     "smoke": "tsx scripts/smoke.ts",
     "verify:phase1": "tsx scripts/verify-phase1.ts",
     "verify:phase2": "tsx scripts/verify-phase2.ts",
@@ -30,6 +32,7 @@
     "fixtures": "tsx scripts/make-fixtures.ts"
   },
   "dependencies": {
+    "diff": "8.0.4",
     "dompurify": "3.4.17",
     "exceljs": "4.4.0",
     "katex": "0.19.1",

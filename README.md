@@ -2,7 +2,7 @@
 
 Kenneth 的 pi 图形客户端，底层遥控本机现有的 pi。完整方案见 [`PLAN.md`](PLAN.md)，开发规矩见 [`AGENTS.md`](AGENTS.md)。
 
-**当前进度：第一版六个阶段及第二版第 7–9 阶段已完成。** 新增终端对话实时同步、外部修改保护、失效项目重新指定、中文错误详情、插件提醒隐藏/恢复、自绘模型/权限菜单和横向推理滑杆，以及插件管理页面。第二版后续工作见 [`PLAN-v2.md`](PLAN-v2.md)。Mac 应用通过实际启动/聊天验收；Windows SSH 远程使用曾由 Kenneth 在真机确认，Windows 本地版尚未实现。
+**当前进度：第一版六个阶段及第二版第 7–10 阶段已完成。** 新增终端对话实时同步、外部修改保护、失效项目重新指定、中文错误详情、插件提醒隐藏/恢复、自绘模型/权限菜单和横向推理滑杆、插件管理页面，以及每轮改动卡片和 diff 审阅。第二版后续工作见 [`PLAN-v2.md`](PLAN-v2.md)。Mac 应用通过实际启动/聊天验收；Windows SSH 远程使用曾由 Kenneth 在真机确认，Windows 本地版尚未实现。
 
 ## 怎么打开试
 
@@ -59,6 +59,20 @@ npm run dev
 
 插件及其安装脚本能以你的权限执行代码，只安装信任的来源。页面操作要求手动确认，不注册成 AI 工具；这不是操作系统级隔离，不能阻止拥有任意 shell 权限的程序自行运行包管理命令。搜索/下载量查询由后台访问 npm，网页不直接请求外网；GitHub 链接在系统浏览器打开。
 
+## 查看代码改动
+
+让 AI 用 `edit` 修改文件或用 `write` 新建文件，回复结束后会出现 **本轮改动** 卡片：文件数量、每个文件增加/删除的行数。点文件名直接打开右侧“改动”标签，不必从一大段工具参数里找变化。
+
+- **本轮**：查看一轮的修改前后快照；左上角可选择较早的轮次。点旧卡片会固定到那一轮，不会偷换成最近一轮。
+- **这个对话全部**：合并当前对话分支已经捕获的改动，同一文件比较最早的修改前与最后的修改后，不把反复修改的行数简单相加。
+- **未提交（git）**：只在 Git 项目出现，比较 HEAD 与当前文件，包含暂存、工作区和未跟踪文件；这里也能看到普通 bash、编辑器等产生的改动。只读，不做暂存或提交。
+- **统一 / 并排**：右上角切换；红底是删除，绿底是新增，有新旧行号及语法高亮。长文件中没改的部分默认折叠，可展开再收起。
+- 展开 `edit` / `write` 工具卡片，会显示**这一次工具操作**的 diff；原始参数仍可展开。
+
+快照在 `~/.pi-desk/changes/<对话id>/`，原子保存、文件权限为 `600`，正文不写入 pi 对话或发给模型。刷新、关闭后从左栏重新打开旧对话仍能看见；升级前的对话没有快照就不会编造。大于 1 MB、二进制、敏感文件或符号链接不保存可展示正文；并发或捕获之间有空隙会提示，不能据此断言每一处改动都来自 AI。
+
+每轮最多保留约 12 MB 的快照内容及 256 次操作；达到限制会明确提示。“这个对话全部”过大时需改为逐轮查看。快照暂不自动清理，也不会随着删除对话自动清除；需要释放空间时，先退出 App，用 Finder 的“前往文件夹”打开 `~/.pi-desk/changes/`，把不需要的记录移到废纸篓。这只清除 App 的改动历史，不会改项目文件，但对应卡片将不再可用。**本版没有撤销按钮**，所有改动审阅都是只读。
+
 ## 界面和快捷键
 
 - **左边**：项目分组可折叠；搜索匹配名字、第一句话或项目路径。家目录分组提示“在这里没有长期记忆”。最近项目和列表宽度保存在浏览器本地，不包含口令。
@@ -67,7 +81,7 @@ npm run dev
 - **权限胶囊**：三项自绘菜单带说明；选择“完全放开”会再确认一次，默认焦点在“取消”。回复时不能切换模型，权限仍可调整。有项目目标记录时会显示“暂停目标”，行为和终端 `/goal-pause` 相同。
 - **模型可用性**：列表来自 pi 当前配置，不会为探测在线状态向模型服务额外发送请求。列表中存在不代表服务此刻在线；当前模型已不在列表时，会灰显并说明。
 - **中间**：Markdown、代码高亮/复制、表格、Mermaid 图和公式；默认折叠的思考过程和工具卡片。工具里的文件路径可点击，在右侧预览。向上翻时不会强制滚到底，出现“回到底部”按钮。
-- **右边**：第一个固定标签“文件”是按需展开的项目树；点击文件开预览，同一个文件不重复开标签。顶部栏右边的面板图标或面板右上角 `×` 收起；拖面板左边界调整宽度。切项目时标签按项目隔离，当前标签页刷新后仍保留。
+- **右边**：固定标签“文件”是按需展开的项目树，“改动”用于审阅 diff；点击文件开预览，同一个文件不重复开标签。顶部栏右边的面板图标或面板右上角 `×` 收起；拖面板左边界调整宽度。切项目时标签按项目隔离，当前标签页刷新后仍保留。
 - **底部输入框**：
   - Enter：发送；回复中就是“插话”。
   - Shift+Enter：换行；中文输入法的确认键不会误发送。
@@ -206,7 +220,7 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:4317:127.0.0.1:4317 kenneth@alex
 
 ```bash
 npm run typecheck       # 后台、前端、脚本和 Vite 配置的 TypeScript
-npm test                # 不调用模型：64 组自动测试（含真实 pi 权限/目录映射及插件管理）
+npm test                # 不调用模型：70 组自动测试（含真实 pi 权限/目录映射、插件与快照边界）
 npm run build           # 构建真实聊天网页
 npm run verify:phase1   # 后台完整验收，包含一次真实模型请求
 npm run verify:phase2   # 真实 Chrome 聊天页 + 终端 pi -r + 生产页面验收
@@ -222,6 +236,9 @@ npm run verify:phase6   # Mac 必要验收；不自动验证 Windows
 npm run verify:phase7   # 真实终端同步 + 失效项目/故障/插件提醒 + 深浅截图
 npm run verify:phase8   # 菜单键盘/拖动/确认 + 真实 pi 动态档位和权限 + 深浅截图
 npm run verify:phase9   # 插件页面 + 隔离配置真实安装/卸载、搜索启停和设置合并
+npm run verify:phase10:capture # 真实 pi 的工具前后快照、统计与后台重启恢复
+npm run verify:phase10  # 两轮真实修改、三个范围、diff/高亮/折叠/刷新与深浅截图
+PI_DESK_VERIFY_CHANGES=1 npm run verify:phase6 # 打包 App 真正修改文件、退出后重开并恢复历史卡片
 ```
 
 先关闭其他占用 4317 / 5173 的后台。第 2–5 阶段验收使用已安装的 Google Chrome；终端恢复检查还使用 Python 3。Playwright 已固定为开发依赖，不需要下载额外浏览器。日常使用网页不需要 Playwright 或 Python。
@@ -230,7 +247,7 @@ npm run verify:phase9   # 插件页面 + 隔离配置真实安装/卸载、搜�
 
 测试创建临时项目和测试对话，结束时只用 `trash` 把它们移到废纸篓，不动你已有的对话。截图存到忽略提交的 `.pi-desk/verification/`，不会提交口令或私人对话。
 
-具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)、[`第 5 阶段`](docs/phase-5-verification.md)、[`第 6 阶段`](docs/phase-6-verification.md)、[`第 7 阶段`](docs/phase-7-verification.md)、[`第 8 阶段`](docs/phase-8-verification.md)、[`第 9 阶段`](docs/phase-9-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
+具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)、[`第 5 阶段`](docs/phase-5-verification.md)、[`第 6 阶段`](docs/phase-6-verification.md)、[`第 7 阶段`](docs/phase-7-verification.md)、[`第 8 阶段`](docs/phase-8-verification.md)、[`第 9 阶段`](docs/phase-9-verification.md)、[`第 10 阶段`](docs/phase-10-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
 
 ## 后台协议（给后续开发用）
 
@@ -238,7 +255,7 @@ npm run verify:phase9   # 插件页面 + 隔离配置真实安装/卸载、搜�
 
 | 请求 | 返回 |
 |---|---|
-| `GET /api/health` | `{ok: true, phase: 9, processes: 数量}` |
+| `GET /api/health` | `{ok: true, phase: 10, processes: 数量}` |
 | `GET /api/workspace` | `{cwd: 后台项目根目录, home: 家目录}` |
 | `GET /api/projects` | `{projects: [{cwd, sessions: [{path, id, cwd, title, name?, mtime}]}], activity: [{cwd, sessionPath?, busy}]}` |
 | `POST /api/projects/relocate` | JSON `{cwd,path}`，仅为失效项目设置 App 映射，实际 pi runtime 使用新 cwd |
@@ -255,6 +272,8 @@ npm run verify:phase9   # 插件页面 + 隔离配置真实安装/卸载、搜�
 | `GET /api/office?cwd=&path=` | 可用时隔离转换并返回缓存 PDF；缺失 501，失败/超时 422 |
 | `POST /api/open` / `/api/reveal` | JSON `{cwd,path}`，检查后用参数数组执行 macOS `open` / `open -R` |
 | `POST /api/upload?cwd=&name=` | 原始字节，50 MB 上限 → `{cwd,path,name,size,mime,image}`；只写已打开项目的隐藏上传目录，维护 Git 本地排除 |
+| `GET /api/changes?cwd=&sessionId=` | 当前活动对话分支的改动摘要，正文不进列表 |
+| `GET /api/changes/review?cwd=&sessionId=&scope=&turnId=&toolId=` | turn / session / git 的只读快照；可指定这一轮内的单个工具 |
 | `GET /api/goals?cwd=` | 从已打开项目目标文件读取公开进度，不返回调度器/存储配置，不允许越界软链接 |
 
 WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式允许本机 5173 Origin，生产模式只允许本机 4317 Origin。命令行客户端也要发送 Origin。
@@ -269,6 +288,7 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 // 后台 → 客户端
 { op: "opened", cwd, state, messages, stats, models, commands, seq, ui, extensions, sync }
 { op: "projects_changed" }
+{ op: "changes_changed", cwd, sessionId, error? }
 { op: "session_sync", cwd, state: {sessionPath, externalChanged} }
 { op: "notice_preferences", hidden: [{id, plugin, pattern, builtin?}] }
 { op: "ui_states", states: [{cwd, state: uiSnapshot}] }
@@ -304,10 +324,10 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 - **找不到模型 / 请求报错**：先在终端 pi 里确认 `cliproxy/gpt-6-luna` 能用。本项目不替你改模型配置；新对话按 pi 的默认配置，新建后请重新确认模型和推理档位。
 - **旧对话的思考耗时**：pi 没保存耗时就只显示“思考过程”，不会编造 N 秒；当前流式回复会计时。
 - **旧项目目录已不存在**：会话仍在列表中；点进去可重新指定文件夹，也可确认后移到废纸篓。App 映射不改变终端的原目录。
-- **还没做**：系统级通知、文件改动汇总等第二期功能。当前只有标题提醒，没有系统通知；Electron 无自动更新。
+- **还没做**：独立运行引擎、正式图标/安装包、系统级通知及改动撤销。当前只有标题提醒，没有系统通知；Electron 无自动更新。
 - **未验证**：Safari、Intel Mac 及装好 LibreOffice 后的隔离转换。Windows SSH/浏览器由 Kenneth 真机反馈通过，非代理自动操作。Mac Electron 已实际启动/聊天，Finder 显示已实际调用；系统默认软件打开仍只检查参数接线，没自动启动用户的其他 GUI 应用。
 - **依赖审计**：当前仍有 **27 项告警：23 moderate、4 high**，涉及 Vite 开发链、ExcelJS、SDK、Electron 和打包链。Electron 35 是方案指定的旧版本，不应认为仍有持续安全维护；主窗口为兼容隔离 HTML 开关保留 CSP unsafe-inline，也不能宣称完全防 XSS。SDK 不作为生产发动机，打包不包含开发 node_modules，但这不等于告警无风险。需独立升级/回归，没有用 `npm audit fix --force` 擅自跨大版本。只在本机可信项目使用，不暴露到公网。
 
 ## 致谢
 
-- [pi-gui](https://github.com/minghinmatthewlam/pi-gui)（MIT）：第 8 阶段参考其 `apps/desktop/src/features/conversation/model-selector.tsx` 的模型搜索/分组结构及菜单视觉设计，适配在 `src/components/chat/ModelBar.tsx`。来源版本 `faf8edd6d7a7e3bf3c508d6f600a22d3821ac108`；保留 [完整 MIT 许可](docs/licenses/pi-gui-MIT.txt)，桌面 App 也携带该许可。第 9 阶段还参考 `apps/desktop/src/features/extensions/extensions-view.tsx` 的资源行布局，适配在 `src/components/plugins/PluginsPage.tsx`。未复制其引擎或整体分层。
+- [pi-gui](https://github.com/minghinmatthewlam/pi-gui)（MIT）：第 8 阶段参考其 `apps/desktop/src/features/conversation/model-selector.tsx` 的模型搜索/分组结构及菜单视觉设计，适配在 `src/components/chat/ModelBar.tsx`。来源版本 `faf8edd6d7a7e3bf3c508d6f600a22d3821ac108`；保留 [完整 MIT 许可](docs/licenses/pi-gui-MIT.txt)，桌面 App 也携带该许可。第 9 阶段还参考 `apps/desktop/src/features/extensions/extensions-view.tsx` 的资源行布局，适配在 `src/components/plugins/PluginsPage.tsx`。第 10 阶段的 `src/components/changes/TurnChangesCard.tsx` 及 `changes.css` 的卡片布局改编自 `apps/desktop/src/features/conversation/turn-changes-card.tsx`；快照与 diff 面板另行实现，只参考其交互。未复制其引擎或整体分层。

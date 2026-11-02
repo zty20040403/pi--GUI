@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { promisify } from "node:util";
 import { realpath, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
 import { BASE_URL, DeskAuth, HOST, PORT } from "./auth.js";
@@ -30,6 +30,9 @@ import { MAP_COMMAND, MAP_STATUS } from "../pi-extension/desk-session-map.js";
 import type { UiSnapshot } from "../shared/extensions.js";
 import { setTimeout as delay } from "node:timers/promises";
 import { PluginService, type PluginServiceOptions } from "./plugins.js";
+import { ChangeService } from "./changes.js";
+import { ChangeStore } from "./change-store.js";
+import { CHANGES_STATUS } from "../shared/changes.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKSPACE = process.env.PI_DESK_WORKSPACE || ROOT;
@@ -64,6 +67,10 @@ export function createDeskServer(options: ServerOptions = {}) {
   const sync = new SessionSync(sessionsDir, options.syncOptions);
   const trash = options.trash ?? (async (path: string) => { await promisify(execFile)("trash", [path]); });
   const files = new FileService();
+  const changes = new ChangeService(new ChangeStore(join(dirname(settings.path), "changes")), files, async (cwd) => {
+    if (!pool.activity.some((row) => row.cwd === cwd)) throw new HttpError(409, "请重新打开对话后查看改动");
+    return pool.get(cwd);
+  }, (cwd) => !!pool.activity.find((row) => row.cwd === cwd)?.busy);
   const uploads = new UploadService(files, trash);
   const office = new OfficePreview();
   let pluginReloadInProgress = false;
@@ -116,6 +123,12 @@ export function createDeskServer(options: ServerOptions = {}) {
     const url = new URL(req.url ?? "/", BASE_URL);
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       if (!auth.checkHttp(req)) return json(res, 401, { error: "未授权" });
+      if (req.method === "GET" && url.pathname === "/api/changes") return json(res, 200, await changes.index(url.searchParams.get("cwd"), url.searchParams.get("sessionId")));
+      if (req.method === "GET" && url.pathname === "/api/changes/review") {
+        const review = await changes.review(url.searchParams.get("cwd"), url.searchParams.get("sessionId"), url.searchParams.get("scope"), url.searchParams.get("turnId") ?? undefined, url.searchParams.get("toolId") ?? undefined);
+        // 与文件预览一样返回经过路径校验的原始内容；通用日志脱敏不能改变源代码/diff。
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }); res.end(JSON.stringify(review)); return;
+      }
       if (url.pathname.startsWith("/api/plugins")) {
         if (req.method === "GET" && url.pathname === "/api/plugins") return json(res, 200, await plugins.list(url.searchParams.get("refresh") === "1"));
         if (req.method === "GET" && url.pathname === "/api/plugins/status") return json(res, 200, plugins.status());
@@ -196,7 +209,7 @@ export function createDeskServer(options: ServerOptions = {}) {
         } finally { deleting.delete(session.path); }
       }
       if (req.method !== "GET") return json(res, 405, { error: "不支持这个方法" });
-      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 9, processes: pool.size });
+      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 10, processes: pool.size });
       if (url.pathname === "/api/projects") {
         const projects = await listProjects(sessionsDir, await settings.mappings()); sync.watchProjects(projects.map((project) => project.cwd));
         return json(res, 200, { projects, activity: pool.activity });
@@ -233,7 +246,7 @@ export function createDeskServer(options: ServerOptions = {}) {
   function broadcast(value: unknown) {
     for (const ws of wsServer.clients) send(ws, value);
   }
-  function uiState(state: UiSnapshot): UiSnapshot { const statuses = { ...state.statuses }; delete statuses[MAP_STATUS]; return { ...state, statuses }; }
+  function uiState(state: UiSnapshot): UiSnapshot { const statuses = { ...state.statuses }; delete statuses[MAP_STATUS]; delete statuses[CHANGES_STATUS]; return { ...state, statuses }; }
   async function switchSaved(pi: PiProcess, path: string): Promise<RpcRecord> {
     const session = await savedSession(path, sessionsDir);
     if (mappedCwd(session.cwd, await settings.mappings()) === session.cwd) return pi.request({ type: "switch_session", sessionPath: path });
@@ -279,6 +292,10 @@ export function createDeskServer(options: ServerOptions = {}) {
   sync.on("external_changed", (cwd: string, state) => broadcast({ op: "session_sync", cwd, state }));
   pool.on("record", (cwd: string, record: RpcRecord, seq: number, sessionPath?: string, pi?: PiProcess) => {
     if (pi) sync.observe(pi, record);
+    if (record.type === "extension_ui_request" && record.method === "setStatus" && record.statusKey === CHANGES_STATUS) {
+      try { const value = JSON.parse(String(record.statusText)); if (typeof value.sessionId === "string") broadcast({ op: "changes_changed", cwd, sessionId: value.sessionId, error: typeof value.error === "string" ? value.error : undefined }); } catch {}
+      return;
+    }
     if (record.type === "extension_ui_request" && record.method === "setStatus" && record.statusKey === MAP_STATUS) return;
     if (record.type === "extension_ui_request" && record.method === "notify" && typeof record.message === "string") {
       const notice = notices.observe(record.message); if (notice.hidden) return;

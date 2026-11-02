@@ -68,6 +68,8 @@ export class RpcClient {
         this.buffered = [];
         this.emit({ kind: "connection", value: "ready" });
         this.resolveOpen(message);
+      } else if (message.op === "changes_changed") {
+        this.emit({ kind: "event", cwd: message.cwd, value: { type: "desk_changes_changed", sessionId: message.sessionId, error: message.error } });
       } else if (message.op === "process_restarting") {
         this.emit({ kind: "event", cwd: message.cwd, value: { type: "desk_process_exit" } });
       } else if (message.op === "plugins_reload") {

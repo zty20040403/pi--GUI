@@ -64,6 +64,7 @@ async function mockTests(browser: Browser) {
   await page.route("**/api/workspace", (route) => route.fulfill({ json: { cwd: "/fixture-a", home: "/fixture-home" } }));
   await page.route("**/api/tree**", (route) => route.fulfill({ json: { cwd: "/fixture-a", dir: "/fixture-a", entries: [], truncated: false } }));
   await page.route("**/api/projects", (route) => route.fulfill({ json: { projects: grouped(), activity: [...sessions.values()].map((session) => ({ cwd: session.cwd, sessionPath: session.path, busy: busy.has(session.path) })) } }));
+  await page.route("**/api/changes?**", (route) => route.fulfill({ json: { turns: [], git: false } }));
   await page.route("**/api/check-dir", (route) => { const path = route.request().postDataJSON().path; return path === "/fixture-b" ? route.fulfill({ json: { cwd: path } }) : route.fulfill({ status: 400, json: { error: "文件夹不存在" } }); });
   await page.route("**/api/sessions/delete", async (route) => {
     if (failDelete) { await route.fulfill({ status: 500, json: { error: "移到废纸篓失败" } }); return; }

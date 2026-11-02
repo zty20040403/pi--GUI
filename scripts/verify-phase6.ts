@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, stat, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
+import { get } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -12,12 +13,20 @@ import { chooseModel, setThinking, expectModelReady } from "./ui-helpers.js";
 const exec = promisify(execFile); const appPath = resolve("release/mac-arm64/pi desk.app"); const artifacts = resolve(".pi-desk/verification");
 async function idle(page: Page) { await expect(page.getByTestId("connection-status")).toContainText("已连接", { timeout: 30000 }); await expectModelReady(page); }
 async function port() { const server = createServer(); await new Promise<void>((done) => server.listen(0, "127.0.0.1", done)); const value = (server.address() as { port: number }).port; await new Promise<void>((done) => server.close(() => done())); return value; }
-async function noBackend() { await expect.poll(async () => { try { await fetch("http://127.0.0.1:4317/"); return false; } catch { return true; } }, { timeout: 10000 }).toBe(true); }
+// 不用 fetch 的 keep-alive 池探测正在退出的进程：Node 24.16 的 undici 曾在关闭 socket 时抛出未捕获的 setTypeOfService EINVAL。
+async function httpReady(url: string): Promise<boolean> { return new Promise((done) => { const request = get(url, { agent: false }, (response) => { response.resume(); done(response.statusCode === 200); }); request.on("error", () => done(false)); request.setTimeout(1000, () => request.destroy()); }); }
+async function noBackend() { await expect.poll(() => new Promise<boolean>((done) => {
+  const socket = createConnection({ host: "127.0.0.1", port: 4317 });
+  socket.once("connect", () => { socket.destroy(); done(false); });
+  socket.once("error", (error: NodeJS.ErrnoException) => done(error.code === "ECONNREFUSED"));
+  socket.setTimeout(1000, () => { socket.destroy(); done(false); });
+}), { timeout: 10000 }).toBe(true); }
 async function saved(page: Page) { return page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "{}").sessionPath as string | undefined, SESSION_KEY); }
 async function main() {
   await mkdir(artifacts, { recursive: true }); const root = await realpath(await mkdtemp(join(tmpdir(), "pi-gui-phase6-"))); const project = join(root, "project"); const other = join(root, "other");
   await mkdir(project); await mkdir(other); await writeFile(join(project, "sample.md"), "# DESKTOP PREVIEW OK\n"); await writeFile(join(other, "other.txt"), "NATIVE FOLDER FIXTURE");
-  const sessions = new Set<string>(); let cost = 0; let errors: string[] = [];
+  const sessions = new Set<string>(); let cost = 0; let errors: string[] = []; let changedSession: string | undefined;
+  const verifyChanges = process.env.PI_DESK_VERIFY_CHANGES === "1";
   try {
     await noBackend();
     const devData = join(root, "dev-profile"); await mkdir(devData); await writeFile(join(devData, "window.json"), JSON.stringify({ workspace: project }));
@@ -53,7 +62,7 @@ async function main() {
     await exec("open", ["-n", installed, "--args", `--user-data-dir=${packagedData}`, `--remote-debugging-port=${debugPort}`]);
     let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
     try {
-      await expect.poll(async () => { try { return (await fetch(`http://127.0.0.1:${debugPort}/json/version`)).ok; } catch { return false; } }, { timeout: 30000 }).toBe(true);
+      await expect.poll(() => httpReady(`http://127.0.0.1:${debugPort}/json/version`), { timeout: 30000 }).toBe(true);
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`);
       await expect.poll(() => browser!.contexts()[0]?.pages().length ?? 0, { timeout: 30000 }).toBeGreaterThan(0);
       const page = browser.contexts()[0].pages()[0]; page.on("pageerror", (error) => errors.push(error.message)); await idle(page);
@@ -76,13 +85,34 @@ async function main() {
       // 这里真正调用 shell.showItemInFolder（没有替身），Finder 选择的是合成文件。
       await page.getByRole("button", { name: "在 Finder 中显示", exact: true }).click();
       await page.getByLabel("搜索对话").fill(root.split("/").at(-1)!);
+      if (verifyChanges) {
+        await page.getByLabel("消息", { exact: true }).fill("只用 edit 把 sample.md 中 DESKTOP PREVIEW OK 改为 DESKTOP CHANGE OK，其余内容不变。完成后简短回复。"); await page.getByLabel("消息", { exact: true }).press("Enter");
+        const card = page.getByTestId("turn-changes"); await expect(card).toHaveCount(1, { timeout: 180000 }); await expect(card).toContainText("改动了 1 个文件"); await expect(card.locator("header .change-added")).toHaveText("+1"); await expect(card.locator("header .change-removed")).toHaveText("−1");
+        await card.locator('[data-change-path="sample.md"]').click(); await expect(page.getByTestId("review-panel").locator(".diff-row.added")).toContainText("DESKTOP CHANGE OK");
+        changedSession = await saved(page); assert.ok(changedSession); sessions.add(changedSession);
+        cost = Number((await page.getByTestId("session-cost").innerText()).match(/\$([\d.]+)/)?.[1] || 0);
+        await page.screenshot({ path: join(artifacts, "phase-10-desktop-diff.png") });
+      }
       await page.screenshot({ path: join(artifacts, "phase-6-desktop.png") }); assert.deepEqual(errors, []);
       console.log(`Mac .app 验收通过：LaunchServices 实际打开、自带后台/网页/权限插件、luna/low 回复、Markdown 预览和真实 Finder 显示；聊天 $${cost.toFixed(6)}。`);
     } finally {
       if (browser) { const page = browser.contexts()[0]?.pages()[0]; if (page) await page.evaluate(() => window.close()).catch(() => {}); await browser.close(); }
       await noBackend();
     }
-    await writeFile(join(artifacts, "phase-6-mac-summary.json"), JSON.stringify({ macApp: true, launchServices: true, chatCost: cost, model: "cliproxy/gpt-6-luna", thinkingLevel: "low", windowPersistence: true, nativeWiring: true, realFinderCall: true, windows: "pending user verification" }, null, 2));
+    if (changedSession) {
+      const reopenPort = await port(); await exec("open", ["-n", installed, "--args", `--user-data-dir=${packagedData}`, `--remote-debugging-port=${reopenPort}`]);
+      let reopened: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
+      try {
+        await expect.poll(() => httpReady(`http://127.0.0.1:${reopenPort}/json/version`), { timeout: 30000 }).toBe(true);
+        reopened = await chromium.connectOverCDP(`http://127.0.0.1:${reopenPort}`); await expect.poll(() => reopened!.contexts()[0]?.pages().length ?? 0, { timeout: 30000 }).toBeGreaterThan(0);
+        const page = reopened.contexts()[0].pages()[0]; await idle(page); await page.getByLabel("搜索对话").fill(root.split("/").at(-1)!);
+        await page.locator(`[data-session-path="${changedSession}"] .session-open`).click(); await idle(page);
+        await expect(page.getByTestId("turn-changes")).toHaveCount(1); await page.getByTestId("turn-changes").locator('[data-change-path="sample.md"]').click(); await expect(page.getByTestId("review-panel").getByTestId("diff-view")).toContainText("DESKTOP CHANGE OK");
+        await page.screenshot({ path: join(artifacts, "phase-10-desktop-reopened.png") });
+        console.log("第 10 阶段打包 App 验收通过：真实 edit 的 +1/-1、打包快照扩展、退出并通过 LaunchServices 重开 App 后恢复同一张历史卡片和 diff。");
+      } finally { if (reopened) { const page = reopened.contexts()[0]?.pages()[0]; if (page) await page.evaluate(() => window.close()).catch(() => {}); await reopened.close(); } await noBackend(); }
+    }
+    await writeFile(join(artifacts, "phase-6-mac-summary.json"), JSON.stringify({ macApp: true, launchServices: true, chatCost: cost, model: "cliproxy/gpt-6-luna", thinkingLevel: "low", windowPersistence: true, nativeWiring: true, realFinderCall: true, changesCapturedAndAppReopened: !!changedSession, windows: "pending user verification" }, null, 2));
     console.log("Mac 必要验收完成；Windows 仍须用户在真机确认，不算已通过。");
   } finally { for (const path of sessions) { try { await stat(path); await exec("trash", [path]); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } } await exec("trash", [root]); }
 }

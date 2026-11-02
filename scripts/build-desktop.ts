@@ -16,7 +16,7 @@ await cp(join(root, "docs/licenses"), join(staging, "licenses"), { recursive: tr
 await cp(join(root, "dist"), join(runtime, "dist"), { recursive: true });
 await cp(join(root, "pi-extension"), join(runtime, "pi-extension"), { recursive: true });
 // 把纯目录映射辅助代码打进 App 自己的扩展；不引入/打包另一份 pi 引擎。
-await build({ entryPoints: [join(root, "pi-extension/desk-session-map.ts")], outfile: join(runtime, "pi-extension/desk-session-map.ts"), bundle: true, platform: "node", format: "esm", target: "node22", sourcemap: false });
+for (const name of ["desk-session-map.ts", "desk-changes.ts"]) await build({ entryPoints: [join(root, "pi-extension", name)], outfile: join(runtime, "pi-extension", name), bundle: true, platform: "node", format: "esm", target: "node22", sourcemap: false });
 await build({ entryPoints: [join(root, "server/index.ts")], outfile: join(runtime, "server/index.mjs"), bundle: true, platform: "node", format: "esm", target: "node22", sourcemap: false,
   banner: { js: 'import { createRequire as deskCreateRequire } from "node:module"; const require = deskCreateRequire(import.meta.url);' },
 });

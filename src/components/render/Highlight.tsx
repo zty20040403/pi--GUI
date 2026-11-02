@@ -7,6 +7,12 @@ export async function highlighted(code: string, language: string) {
   if (lang !== "text" && !highlighter.getLoadedLanguages().includes(lang)) await highlighter.loadLanguage(lang);
   return highlighter.codeToHtml(code, { lang, themes: { light: "github-light", dark: "github-dark" } });
 }
+export async function highlightTokens(code: string, language: string) {
+  const highlighter = await engine;
+  const lang = Object.hasOwn(bundledLanguages, language) ? language as BundledLanguage : "text";
+  if (lang !== "text" && !highlighter.getLoadedLanguages().includes(lang)) await highlighter.loadLanguage(lang);
+  return highlighter.codeToTokens(code, { lang, themes: { light: "github-light", dark: "github-dark" } }).tokens;
+}
 export default function Highlight({ code, language, lines = false }: { code: string; language: string; lines?: boolean }) {
   const [html, setHtml] = useState("");
   useEffect(() => {

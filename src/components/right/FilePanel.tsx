@@ -1,10 +1,11 @@
 import { Component, lazy, Suspense, useState, type ReactNode } from "react";
-import { FolderSearch, FolderTree, RotateCw, SquareArrowOutUpRight, X } from "lucide-react";
+import { FileDiff, FolderSearch, FolderTree, RotateCw, SquareArrowOutUpRight, X } from "lucide-react";
 import { useFiles } from "../../api/FileProvider";
 import { fileSize, previewKind, systemOpen, type FileInfo, type PreviewProps } from "../../api/files";
 import { fileIcon } from "./fileIcon";
 import { ErrorContent } from "../ui/ErrorContent";
 import { errorInfo, type ErrorValue } from "../../../shared/errors";
+const ChangesPanel = lazy(() => import("../changes/ChangesPanel"));
 const FileTree = lazy(() => import("./FileTree"));
 const TextPreview = lazy(() => import("./TextPreview"));
 const ImagePreview = lazy(() => import("./ImagePreview"));
@@ -36,16 +37,17 @@ function Preview(props: PreviewProps) {
   }
 }
 export function FilePanel() {
-  const { project, shown, hide, error, clearError, select, close, refresh } = useFiles();
+  const { project, shown, hide, showChanges, error, clearError, select, close, refresh } = useFiles();
   const [action, setAction] = useState(false); const [actionError, setActionError] = useState<ErrorValue>("");
-  const selected = project.tabs.find((file) => file.path === project.active);
+  const selected = project.tabs.find((file) => file.path === project.active); const changes = project.active === "changes";
   async function openSystem(file: FileInfo, reveal: boolean) {
     setAction(true); setActionError(""); try { await systemOpen(file, reveal); } catch (error) { setActionError(errorInfo(error)); } finally { setAction(false); }
   }
-  return <aside className="file-panel" hidden={!shown} aria-label="文件面板">
+  return <aside className={`file-panel ${changes ? "changes-active" : ""}`} hidden={!shown} aria-label="文件面板">
     {shown && <><div className="file-panel-heading">
       <div className="file-tabs" role="tablist" aria-label="文件标签">
-        <button id="file-tree-tab" role="tab" aria-selected={!selected} onClick={() => select("tree")}><FolderTree size={14} aria-hidden />文件</button>
+        <button id="file-tree-tab" role="tab" aria-selected={!selected && !changes} onClick={() => select("tree")}><FolderTree size={14} aria-hidden />文件</button>
+        <button id="changes-tab" role="tab" aria-selected={changes} onClick={showChanges}><FileDiff size={14} aria-hidden />改动</button>
         {project.tabs.map((file) => { const Icon = fileIcon(file.name); return <div className={`file-tab ${project.active === file.path ? "selected" : ""}`} key={file.path}>
           <button role="tab" aria-selected={project.active === file.path} title={file.path} data-file-path={file.path} onClick={() => select(file.path)}><Icon size={13} aria-hidden />{file.name}</button>
           <button className="icon-button small" aria-label={`关闭预览 ${file.name}`} title="关闭" onClick={() => close(file.path)}><X size={12} /></button>
@@ -54,7 +56,7 @@ export function FilePanel() {
       <button className="icon-button" aria-label="收起文件面板" title="收起文件面板" onClick={hide}><X size={15} /></button>
     </div>
       {(error || actionError) && <div className="file-panel-error" role="alert"><ErrorContent error={error || actionError} /><button className="quiet-button" onClick={() => { clearError(); setActionError(""); }}>关闭</button></div>}
-      <div className="file-body"><div className="tree-panel" hidden={!!selected} role="tabpanel" aria-labelledby="file-tree-tab"><Suspense fallback={<p className="tree-empty">正在载入文件树…</p>}><FileTree /></Suspense></div>
+      <div className="file-body">{changes && <div className="changes-panel-body" role="tabpanel" aria-labelledby="changes-tab"><PreviewBoundary><Suspense fallback={<p className="tree-empty">正在载入改动面板…</p>}><ChangesPanel /></Suspense></PreviewBoundary></div>}<div className="tree-panel" hidden={!!selected || changes} role="tabpanel" aria-labelledby="file-tree-tab"><Suspense fallback={<p className="tree-empty">正在载入文件树…</p>}><FileTree /></Suspense></div>
         {selected && <div className="file-view" key={selected.path}>
           <div className="file-meta"><span title={selected.path}>&lrm;{selected.path}</span><div className="file-actions">
             <button className="icon-button" aria-label="用默认软件打开" title="用默认软件打开" disabled={action} onClick={() => void openSystem(selected, false)}><SquareArrowOutUpRight size={14} /></button>

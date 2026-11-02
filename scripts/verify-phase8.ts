@@ -31,7 +31,7 @@ async function main() {
   const emit = (record: object) => route.send(JSON.stringify({ op: "event", cwd: "/fixture", seq: sequence++, record }));
   const ui = () => ({ seq: sequence++, dialogs: [], statuses: { ["desk" + "-permissions"]: `权限：${permission === "full" ? "完全放开" : permission === "read-only" ? "只读" : "自动"}` }, widgets: {} });
   await page.addInitScript((key) => sessionStorage.setItem(key, JSON.stringify({ cwd: "/fixture" })), SESSION_KEY);
-  for (const [path, json] of Object.entries({ workspace: { cwd: "/fixture" }, projects: { projects: [] }, "tree**": { entries: [] }, "goals**": { goals: [] } })) await page.route(`**/api/${path}`, (route) => route.fulfill({ json }));
+  for (const [path, json] of Object.entries({ workspace: { cwd: "/fixture" }, projects: { projects: [] }, "tree**": { entries: [] }, "goals**": { goals: [] }, "changes?**": { turns: [], git: false } })) await page.route(`**/api/${path}`, (route) => route.fulfill({ json }));
   await page.routeWebSocket(/\/ws\?/, (ws) => {
     route = ws;
     ws.onMessage(async (raw) => {

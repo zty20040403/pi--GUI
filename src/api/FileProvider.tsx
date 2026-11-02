@@ -5,7 +5,7 @@ import { emptyFileProject, fileReducer, readFileTabs, type FileProject } from ".
 import type { WireRecord } from "./types";
 import { errorInfo, type ErrorValue } from "../../shared/errors";
 type ContextValue = { project: FileProject; shown: boolean; width: number; error: ErrorValue; toggle: () => void; hide: () => void; setWidth: (value: number) => void;
-  clearError: () => void; openFile: (cwd: string, path: string) => Promise<void>; select: (path: string) => void; close: (path: string) => void;
+  showChanges: () => void; clearError: () => void; openFile: (cwd: string, path: string) => Promise<void>; select: (path: string) => void; close: (path: string) => void;
   refresh: (file: FileInfo, force?: boolean) => Promise<void>; refreshTree: () => void };
 const Context = createContext<ContextValue | null>(null);
 export function useFiles() { const context = useContext(Context); if (!context) throw new Error("缺少 FileProvider"); return context; }
@@ -70,6 +70,7 @@ export function FileProvider({ children }: { children: ReactNode }) {
     catch (error) { setError(errorInfo(error)); setLayout((value) => ({ ...value, shown: true })); }
   }
   return <Context.Provider value={{ project, shown: layout.shown, width: layout.width, error, openFile, refresh,
+    showChanges: () => { dispatch({ type: "select", cwd: chat.cwd, path: "changes" }); setLayout((value) => ({ ...value, shown: true, width: project.active === "changes" ? value.width : Math.max(value.width, 640) })); },
     toggle: () => setLayout((value) => ({ ...value, shown: !value.shown })), hide: () => setLayout((value) => ({ ...value, shown: false })),
     setWidth: (width) => setLayout((value) => ({ ...value, width: Math.max(280, Math.min(720, width)) })), clearError: () => setError(""),
     select: (path) => dispatch({ type: "select", cwd: chat.cwd, path }), close: (path) => dispatch({ type: "close", cwd: chat.cwd, path }),

@@ -62,6 +62,7 @@ async function mockBrowserTests(browser: Browser) {
   const result = (reqId: string, data: any) => route.send(JSON.stringify({ op: "rpc_result", reqId, response: { success: true, data } }));
   await page.route("**/api/workspace", (route) => route.fulfill({ json: { cwd: "/fixture" } }));
   await page.route("**/api/projects", (route) => route.fulfill({ json: { projects: [], activity: [] } }));
+  await page.route("**/api/changes?**", (route) => route.fulfill({ json: { turns: [], git: false } }));
   await page.route("**/api/goals**", (route) => route.fulfill({ json: { goals: [] } }));
   await page.route("**/api/tree**", (route) => route.fulfill({ json: { cwd: "/fixture", dir: "/fixture", entries: [], truncated: false } }));
   await page.routeWebSocket(/\/ws\?/, (ws) => {

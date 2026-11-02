@@ -195,6 +195,8 @@ git clone --depth 1 https://github.com/minghinmatthewlam/pi-gui.git refs/pi-gui
 
 ### 第 10 阶段：像 Codex 一样显示代码改动
 
+已完成并实际验收，记录见 [`docs/phase-10-verification.md`](docs/phase-10-verification.md)。真实 pi 两轮修改、浏览器刷新、打包 Mac App 退出重开均通过。仅捕获 edit / write；普通 bash 不冒充已捕获，可选撤销未实现。
+
 **10.1 记录每一轮的改动**
 写一个 pi 扩展 `pi-extension/desk-changes.ts`（和权限插件一样，只在 App 启动 pi 时加载）：
 - 在 `tool_call` 钩子里，对 `edit` / `write`（以及能识别出会改文件的 `bash`，先不做）在执行**前**读下文件原内容；在 `tool_result` 钩子里读执行**后**的内容。
@@ -224,10 +226,10 @@ git clone --depth 1 https://github.com/minghinmatthewlam/pi-gui.git refs/pi-gui
 - "本轮改动"卡片上加"撤销这些改动"：把文件恢复成改之前的内容。必须先检查文件现在的内容和"改之后"一致（中间没被别人改过），不一致就拒绝并说明；恢复前弹窗确认；恢复的文件先备份到废纸篓。
 
 **验收**
-- [ ] 让 AI 改两个文件、新建一个文件，回复下方出现改动卡片，数字正确。
-- [ ] "改动"标签页三种范围都能看；统一 / 并排视图都正确；长文件能折叠展开。
-- [ ] 刷新页面、重开 App 后，历史对话的改动卡片还在。
-- [ ] 截图：改动卡片、审阅面板统一视图、并排视图（深/浅）。
+- [x] 让 AI 改两个文件、新建一个文件，回复下方出现改动卡片，数字正确（真实 Luna/low：3 文件，+4 / −2）。
+- [x] "改动"标签页三种范围都能看；统一 / 并排视图都正确；长文件能折叠展开。
+- [x] 刷新页面、重开 App 后，历史对话的改动卡片还在（包括 LaunchServices 真正重开打包 App）。
+- [x] 截图：改动卡片、审阅面板统一视图、并排视图（深/浅）；另有工具 diff 和打包 App，共 18 张。
 
 ### 第 11 阶段：打包成真正的 App（macOS）
 

@@ -126,7 +126,7 @@ test("进程池复用/并发/软链接、权限插件参数、退出删除、空
   try {
     const pi = await plain.get(process.cwd());
     const inspected = await pi.request({ type: "inspect" });
-    assert.deepEqual((inspected.data as { argv: string[] }).argv, ["-e", resolve("pi-extension/desk-session-map.ts"), "--mode", "rpc"]);
+    assert.deepEqual((inspected.data as { argv: string[] }).argv, ["-e", resolve("pi-extension/desk-session-map.ts"), "-e", resolve("pi-extension/desk-changes.ts"), "--mode", "rpc"]);
   } finally { await plain.dispose(); }
 });
 

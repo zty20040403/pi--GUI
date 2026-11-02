@@ -63,6 +63,8 @@ export class PiPool extends EventEmitter {
     }
     const mappingPath = resolve(ROOT, "pi-extension", "desk-session-map.ts");
     try { if ((await stat(mappingPath)).isFile()) args.push("-e", mappingPath); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    const changesPath = resolve(ROOT, "pi-extension", "desk-changes.ts");
+    try { if ((await stat(changesPath)).isFile()) args.push("-e", changesPath); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     if (this.closing) throw new Error("后台正在关闭");
     if (this.restarting) throw new HttpError(409, "插件正在重新加载，请稍候");
     // 所有异步检查之后才读 Map，并立刻插入；并发 get 不会启动两个进程。
