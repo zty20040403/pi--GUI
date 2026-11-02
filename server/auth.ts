@@ -42,6 +42,14 @@ export class DeskAuth {
     }
   }
 
+  checkUserAction(req: IncomingMessage): boolean {
+    const origins = [BASE_URL, `http://localhost:${PORT}`];
+    if (this.development) origins.push("http://127.0.0.1:5173", "http://localhost:5173");
+    return this.checkHttp(req) && !!req.headers.origin && origins.includes(req.headers.origin)
+      && req.headers["x-pi-desk-action"] === "user-confirmed" && req.headers["sec-fetch-dest"] === "empty"
+      && ["same-origin", "same-site"].includes(String(req.headers["sec-fetch-site"]));
+  }
+
   checkStatic(req: IncomingMessage): boolean {
     return this.checkHost(req);
   }

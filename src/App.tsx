@@ -13,6 +13,7 @@ import { FileDrop } from "./components/chat/FileDrop";
 import { Messages } from "./components/chat/Messages";
 import { MissingProject } from "./components/chat/MissingProject";
 import { ErrorContent } from "./components/ui/ErrorContent";
+import { PluginsPage } from "./components/plugins/PluginsPage";
 import { SettingsDialog } from "./components/dialogs/SettingsDialog";
 import { errorInfo, type ErrorValue } from "../shared/errors";
 import { SessionSidebar } from "./components/sidebar/SessionSidebar";
@@ -25,6 +26,8 @@ export default function App() {
   const [error, setError] = useState<ErrorValue>("");
   const [dialog, setDialog] = useState<SessionDialogRequest>();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pluginsOpen, setPluginsOpen] = useState(false);
+  function closePlugins() { setPluginsOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="插件"]')?.focus({ preventScroll: true })); }
   const [layout, setLayout] = useState(() => {
     try { const saved = JSON.parse(localStorage.getItem("pi-desk.layout") ?? "{}"); return { open: saved.open !== false, width: Math.max(220, Math.min(460, Number(saved.width) || 264)) }; }
     catch { return { open: true, width: 264 }; }
@@ -62,13 +65,14 @@ export default function App() {
   const elapsed = state.waitingSince ? Math.max(0, Math.floor((now - state.waitingSince) / 1000)) : 0;
   const closeSidebar = () => setLayout((value) => ({ ...value, open: false }));
   const toggleSidebar = () => { if (matchMedia("(max-width:1100px)").matches) files.hide(); setLayout((value) => ({ ...value, open: !value.open })); };
-  return <div className="desk-layout" style={{ "--sidebar-width": `${layout.width}px`, "--file-width": `${files.width}px` } as CSSProperties}>
-    <SessionSidebar hidden={!layout.open} onDialog={requestDialog} onClose={closeSidebar} onSettings={() => setSettingsOpen(true)} />
+  return <div className={`desk-layout ${pluginsOpen ? "plugins-open" : ""}`} style={{ "--sidebar-width": `${layout.width}px`, "--file-width": `${files.width}px` } as CSSProperties}>
+    <SessionSidebar hidden={!layout.open} onDialog={requestDialog} onClose={closeSidebar} onSettings={() => setSettingsOpen(true)} onPlugins={() => setPluginsOpen(true)} />
     {layout.open && <><button className="sidebar-backdrop" aria-label="关闭对话列表遮罩" onClick={closeSidebar} /><div className="sidebar-resizer" role="separator" aria-label="调整对话列表宽度" aria-orientation="vertical" aria-valuemin={220} aria-valuemax={460} aria-valuenow={layout.width} tabIndex={0}
       onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)} onPointerMove={(event) => {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) setLayout((value) => ({ ...value, width: Math.max(220, Math.min(460, event.clientX)) }));
       }} onKeyDown={(event) => { if (["ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); setLayout((value) => ({ ...value, width: Math.max(220, Math.min(460, value.width + (event.key === "ArrowRight" ? 10 : -10))) })); } }} /></>}
-    <main className="app-shell">
+    {pluginsOpen && <PluginsPage close={closePlugins} />}
+    <main className="app-shell" hidden={pluginsOpen}>
       <header className="topbar">
         {!layout.open && <button className="icon-button" aria-label="展开对话列表" title="展开对话列表" onClick={toggleSidebar}><PanelLeft size={16} /></button>}
         <div className="conversation-title">
@@ -91,10 +95,10 @@ export default function App() {
       {unavailable && <MissingProject onDialog={requestDialog} />}
       <div className="chat-content" hidden={!!unavailable}><Messages /><Composer /></div>
     </main>
-    {files.shown && !unavailable && <><button className="file-backdrop" aria-label="关闭文件面板遮罩" onClick={files.hide} /><div className="file-resizer" role="separator" aria-label="调整文件面板宽度" aria-orientation="vertical" aria-valuemin={280} aria-valuemax={720} aria-valuenow={files.width} tabIndex={0}
+    {files.shown && !unavailable && !pluginsOpen && <><button className="file-backdrop" aria-label="关闭文件面板遮罩" onClick={files.hide} /><div className="file-resizer" role="separator" aria-label="调整文件面板宽度" aria-orientation="vertical" aria-valuemin={280} aria-valuemax={720} aria-valuenow={files.width} tabIndex={0}
       onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)} onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) files.setWidth(window.innerWidth - event.clientX); }}
       onKeyDown={(event) => { if (["ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); files.setWidth(files.width + (event.key === "ArrowLeft" ? 10 : -10)); } }} /></>}
-    {!unavailable && <><FilePanel /><FileDrop /></>}
+    {!unavailable && <><FilePanel />{!pluginsOpen && <FileDrop />}</>}
     {dialog && <SessionDialog key={dialog.kind === "folder" ? "folder" : dialog.kind === "relocate" || dialog.kind === "delete-project" ? `${dialog.kind}:${dialog.cwd}` : `${dialog.kind}:${dialog.session.path}`} request={dialog} close={() => setDialog(undefined)} />}
     {settingsOpen && <SettingsDialog close={() => setSettingsOpen(false)} />}
     <ExtensionDialogs /><ExtensionToasts />

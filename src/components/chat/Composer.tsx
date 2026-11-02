@@ -20,7 +20,7 @@ export function shortNumber(value: number) {
 }
 
 export function Composer() {
-  const { state, send, stop, clearError } = useChat();
+  const { state, send, stop, clearError, pluginsReloading } = useChat();
   const attachments = useAttachments(); const ui = useExtensionUi(); const seenEditor = useRef("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -114,7 +114,7 @@ export function Composer() {
   const retryAttachments = lastSubmitted.current ? lastAttachments.current : [...retryText.matchAll(/^附件：(\.pi-desk\/uploads\/[^\n]+)$/gm)].map((match) => ({ kind: "upload" as const, path: match[1] }));
   const permission = modeFromStatus(ui.current.statuses["desk" + "-permissions"]);
   const usage = state.stats.contextUsage;
-  const canSend = ready && !state.externalChanged && (!!draft.trim() || attachmentRefs(attachments.items).length > 0) && !sending && !pendingAttachment;
+  const canSend = ready && !pluginsReloading && !state.externalChanged && (!!draft.trim() || attachmentRefs(attachments.items).length > 0) && !sending && !pendingAttachment;
   const statuses = Object.entries(ui.current.statuses).filter(([key]) => key !== "desk" + "-permissions");
   return <section className="composer-section">
     {configError && <div className="composer-error" role="alert"><ErrorContent error={configError} /><button onClick={() => setConfigError("")}>关闭</button></div>}

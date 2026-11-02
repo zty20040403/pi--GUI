@@ -32,7 +32,11 @@ export function ExtensionUiProvider({ children }: { children: ReactNode }) {
         if ((live.current[cwd]?.seq ?? -1) <= record.state.seq) update((rows) => ({ ...rows, [cwd]: normalized(record.state) })); return;
       }
       if (record.type === "desk_ui_resolved") { update((rows) => ({ ...rows, [cwd]: { ...(rows[cwd] ?? emptyUi()), dialogs: (rows[cwd]?.dialogs ?? []).filter((dialog) => dialog.id !== record.id) } })); return; }
-      if (record.type === "desk_process_exit") { update((rows) => { const next = { ...rows }; delete next[cwd]; return next; }); return; }
+      if (record.type === "desk_process_exit") {
+        update((rows) => { const next = { ...rows }; delete next[cwd]; return next; });
+        for (const id of seen.current) if (id.startsWith(`${cwd}:`)) { seen.current.delete(id); clearTimeout(timers.current.get(id)); timers.current.delete(id); }
+        setToasts((rows) => rows.filter((row) => row.cwd !== cwd)); return;
+      }
       if (record.type !== "extension_ui_request") return;
       if (record.method === "notify" && typeof record.message === "string") {
         const id = `${cwd}:${record.id}`;

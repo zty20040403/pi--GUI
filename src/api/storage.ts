@@ -16,8 +16,8 @@ export function savedTarget(storage: Storage): Target | undefined {
       ? { cwd: target.cwd, sessionPath: typeof target.sessionPath === "string" ? target.sessionPath : undefined } : undefined;
   } catch { return undefined; }
 }
-export async function http<T>(path: string, token: string, body?: unknown): Promise<T> {
-  const response = await fetch(path, { headers: { Authorization: `Bearer ${token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+export async function http<T>(path: string, token: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+  const response = await fetch(path, { headers: { Authorization: `Bearer ${token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}), ...headers },
     ...(body !== undefined ? { method: "POST", body: JSON.stringify(body) } : {}) });
   if (!response.ok) {
     let detail: { error?: string; errorDetails?: string } = {};

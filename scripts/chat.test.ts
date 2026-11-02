@@ -111,5 +111,14 @@ test("RPC 关联、打开快照避免重放重复 delta、断线重连当前对�
     assert.deepEqual(sockets[1].sent, [{ op: "open", cwd: "/fixture", sessionPath: "/session.jsonl" }]);
     sockets[1].receive(opened);
     assert.ok(events.some((event) => event.kind === "connection" && event.value === "reconnecting"));
+    events.length = 0;
+    sockets[1].receive({ op: "plugins_reload", state: "waiting" });
+    sockets[1].receive({ op: "plugins_reload", state: "loading" });
+    sockets[1].receive({ op: "process_restarting", cwd: "/fixture" });
+    assert.ok(events.some((event) => event.kind === "event" && event.value.type === "desk_process_exit"));
+    assert.ok(!events.some((event) => event.kind === "error"));
+    sockets[1].receive({ op: "plugins_reload", state: "finished", restarted: true, targets: [{ cwd: "/fixture", sessionPath: "/restored.jsonl" }] });
+    assert.deepEqual(sockets[1].sent.at(-1), { op: "open", cwd: "/fixture", sessionPath: "/restored.jsonl" });
+    assert.ok(!sockets[1].sent.some((message) => (message as WireRecord).cmd?.type === "prompt"));
   } finally { client.dispose(); }
 });

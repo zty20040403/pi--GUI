@@ -96,6 +96,12 @@ async function start() {
     if (result.canceled || !result.filePaths[0]) return undefined;
     const cwd = await realpath(result.filePaths[0]); preferences.workspace = cwd; await savePreferences(); return { cwd };
   });
+  ipcMain.handle("desktop:open-external", async (event, url) => {
+    authorize(event);
+    // 插件来源仅允许规范化的 GitHub 仓库，不给网页任意协议/本地文件能力。
+    if (typeof url !== "string" || !/^https:\/\/github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(url) || url.split("/").some((part) => part === "." || part === "..")) throw new Error("只允许打开 GitHub 插件仓库");
+    await shell.openExternal(url); return { ok: true };
+  });
   ipcMain.handle("desktop:reveal", async (event, cwd, path) => {
     authorize(event);
     if (typeof cwd !== "string" || typeof path !== "string" || cwd.length > 4096 || path.length > 4096) throw new Error("文件路径格式不正确");

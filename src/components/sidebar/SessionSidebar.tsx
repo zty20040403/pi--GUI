@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Ellipsis, FolderClosed, FolderInput, FolderPlus, FolderX, House, PanelLeft, Pencil, Plus, RefreshCw, Search, Settings, SquarePen, Trash2 } from "lucide-react";
+import { ChevronRight, Ellipsis, FolderClosed, FolderInput, FolderPlus, FolderX, House, PanelLeft, Pencil, Plus, Puzzle, RefreshCw, Search, Settings, SquarePen, Trash2 } from "lucide-react";
 import { useChat } from "../../api/ChatProvider";
 import { blocksOf } from "../../api/state";
 import { displayTitle, filterProjects, projectGroups } from "../../api/projects";
@@ -20,7 +20,7 @@ function relativeTime(mtime: number, now: number) {
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-export function SessionSidebar({ hidden, onDialog, onClose, onSettings }: { hidden: boolean; onDialog: (request: SessionDialogRequest) => void; onClose: () => void; onSettings: () => void }) {
+export function SessionSidebar({ hidden, onDialog, onClose, onSettings, onPlugins }: { hidden: boolean; onDialog: (request: SessionDialogRequest) => void; onClose: () => void; onSettings: () => void; onPlugins: () => void }) {
   const { state, projects, recents, running, home, switching, open, projectsLoading, projectsError, refreshProjects, unavailable, showUnavailable } = useChat();
   const [query, setQuery] = useState("");
   const [error, setError] = useState<ErrorValue>("");
@@ -93,6 +93,6 @@ export function SessionSidebar({ hidden, onDialog, onClose, onSettings }: { hidd
         </section>;
       })}
     </div>
-    <div className="sidebar-footer"><span>{projectsLoading ? "正在刷新…" : "对话与终端里的 pi 共用"}</span><button className="icon-button" aria-label="设置" title="设置 · 已隐藏的提醒" onClick={onSettings}><Settings size={15} /></button></div>
+    <div className="sidebar-footer"><button className="quiet-button sidebar-plugins" aria-label="插件" onClick={onPlugins}><Puzzle size={15} />插件</button><span>{projectsLoading ? "正在刷新…" : "对话与终端里的 pi 共用"}</span><button className="icon-button" aria-label="设置" title="设置 · 已隐藏的提醒" onClick={onSettings}><Settings size={15} /></button></div>
   </aside>;
 }

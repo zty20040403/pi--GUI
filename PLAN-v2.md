@@ -156,6 +156,8 @@ git clone --depth 1 https://github.com/minghinmatthewlam/pi-gui.git refs/pi-gui
 
 ### 第 9 阶段：插件管理页面
 
+已完成并实际验收，记录见 [`docs/phase-9-verification.md`](docs/phase-9-verification.md)。安装、启停、卸载及设置合并均在隔离配置中验收；未重跑会解密凭据、重建用户扩展链接的完整 `setup.sh`。
+
 左栏底部加一个"插件"入口（拼图图标），点开是一个全屏页面（像设置页），分三个标签：
 
 **9.1 已安装**
@@ -186,10 +188,10 @@ git clone --depth 1 https://github.com/minghinmatthewlam/pi-gui.git refs/pi-gui
 - 后台执行 `pi install` / `pi remove` 时用参数数组，不拼字符串；包名用 npm 包名规则校验。
 
 **验收**
-- [ ] 停用 `pi-web-access` 后重新加载，让 AI 上网搜索，它说没有搜索工具；再启用，又能搜。
-- [ ] 在"发现"里搜索一个小插件安装，`pi list` 里出现；卸载后消失。
-- [ ] `settings.json` 改完后其他字段不变（对比备份），`setup.sh` 再跑一次也不会冲掉停用状态。
-- [ ] 截图：已安装、发现、安装确认弹窗（深/浅）。
+- [x] 停用 `pi-web-access` 后重新加载，让 AI 上网搜索，它说没有搜索工具；再启用，又能搜。（真实 pi / Exa，隔离配置。）
+- [x] 在"发现"里搜索一个小插件安装，`pi list` 里出现；卸载后消失。
+- [x] `settings.json` 改完后其他字段不变（对比备份）；在隔离副本执行 `setup.sh` 实际使用的设置合并脚本，停用状态保留。完整 setup.sh 的凭据/链接重建部分未运行。
+- [x] 截图：已安装、发现、安装确认弹窗（深/浅）；另有更新页，共 16 张 1440/1024 截图和 2 张真实配置截图。
 
 ### 第 10 阶段：像 Codex 一样显示代码改动
 

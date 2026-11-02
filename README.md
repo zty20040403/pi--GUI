@@ -2,7 +2,7 @@
 
 Kenneth 的 pi 图形客户端，底层遥控本机现有的 pi。完整方案见 [`PLAN.md`](PLAN.md)，开发规矩见 [`AGENTS.md`](AGENTS.md)。
 
-**当前进度：第一版六个阶段及第二版第 7–8 阶段已完成。** 新增终端对话实时同步、外部修改保护、失效项目重新指定、中文错误详情、插件提醒隐藏/恢复，以及自绘模型/权限菜单和横向推理滑杆。第二版后续工作见 [`PLAN-v2.md`](PLAN-v2.md)。Mac 应用通过实际启动/聊天验收；Windows SSH 远程使用曾由 Kenneth 在真机确认，Windows 本地版尚未实现。
+**当前进度：第一版六个阶段及第二版第 7–9 阶段已完成。** 新增终端对话实时同步、外部修改保护、失效项目重新指定、中文错误详情、插件提醒隐藏/恢复、自绘模型/权限菜单和横向推理滑杆，以及插件管理页面。第二版后续工作见 [`PLAN-v2.md`](PLAN-v2.md)。Mac 应用通过实际启动/聊天验收；Windows SSH 远程使用曾由 Kenneth 在真机确认，Windows 本地版尚未实现。
 
 ## 怎么打开试
 
@@ -43,6 +43,21 @@ npm run dev
 - **不再提示这类**：插件通知右上角可隐藏同类提醒；左栏底部齿轮“设置”→“已隐藏的提醒”可以恢复。指纹包含插件名，路径和数字变化不会再弹。ccstyle 的无效 write 占用提醒默认隐藏；权限审批、提问弹窗和聊天错误不受影响。
 
 这些 App 设置保存在 `~/.pi-desk/settings.json`，不会写入 pi 的模型、插件或 CortexKit 配置。测试可以用 `PI_DESK_DATA_DIR` 或 `PI_DESK_APP_SETTINGS_FILE` 指定隔离位置。
+
+## 插件管理
+
+左栏底部点 **插件**，打开三个标签：
+
+- **已安装**：查看 npm 包、本地扩展和内置扩展；开关只停用/启用，不删除文件。Nix / setup.sh 管理的文件会标注来源，只能启停；npm 包可以点垃圾桶卸载，确认框明确说明会删除插件文件。
+- **发现**：输入包名或关键词搜索；卡片显示说明、作者、周下载量、固定版本、日期、许可证和 GitHub 链接。安装前需确认风险，安装后可以展开进度输出。
+- **更新**：手动“检查更新”，逐个确认固定版本；不自动更新。新版本安装失败会尝试恢复旧版，并报告结果。
+- 改完点 **立即重新加载**：等待所有项目回复结束、插件问题处理完，再重启 App 的 pi 进程。等待期间可以取消，重载不自动发送草稿；终端中的 pi 需自行执行 `/reload`。
+
+**这里修改的是终端和 App 共用的 pi 全局设置。** 只改 `~/.pi/agent/settings.json` 的 `packages` / `extensions`，其他字段保留；修改前备份到 `~/.pi-desk/backups/`，使用 pi 兼容的锁和原子写入，外部改动冲突时拒绝覆盖。npm 安装/卸载通过真实 `pi install` / `pi remove` 执行，版本固定。不会编辑 `models.json`、本地扩展源文件、secrets 或 Nix / CortexKit 文件。
+
+已有包的自定义资源筛选在停用后再启用时会恢复，不会一律变成全选。这个页面管理全局配置，不修改项目 `.pi/settings.json` 的覆盖规则；项目实际加载结果以 pi 为准。
+
+插件及其安装脚本能以你的权限执行代码，只安装信任的来源。页面操作要求手动确认，不注册成 AI 工具；这不是操作系统级隔离，不能阻止拥有任意 shell 权限的程序自行运行包管理命令。搜索/下载量查询由后台访问 npm，网页不直接请求外网；GitHub 链接在系统浏览器打开。
 
 ## 界面和快捷键
 
@@ -118,7 +133,7 @@ Word 预览会提示“排版可能和原文不同”。PPT、旧 Word/Excel 有
 - 删除当前对话后会开启新的空对话，不会继续使用或重新创建刚删除的文件。
 - 后台每次重启都会生成新口令，需重新打开终端本次打印的完整网址；已保存的对话可以恢复。
 
-不会修改你的模型、插件或 CortexKit 配置。不同页面在同一项目里共享一个活动 pi 对话，暂时不是“每个页面各聊一段”。
+聊天本身不修改你的模型、插件或 CortexKit 配置；只有在插件页面手动确认才修改上述插件设置。不同页面在同一项目里共享一个活动 pi 对话，暂时不是“每个页面各聊一段”。
 
 ## 平时用（只开一个端口）
 
@@ -137,7 +152,7 @@ npm start
 本机已安装到 **`~/Applications/pi desk.app`**。Finder 按 `Cmd+Shift+G`，输入 `~/Applications`，找到应用双击打开。第一次被系统拦住时，右键 → 打开；若系统询问访问项目文件夹权限，按你的意愿允许。应用未签名、未公证，只构建 Apple 芯片版。
 
 - 启动时自己运行后台，不需要另外开终端；关窗口或退出时回收后台。
-- 仍使用你现有的 Node.js/pi，不改模型、插件或配置；Finder 启动时会补上常用的用户/Nix PATH。
+- 仍使用你现有的 Node.js/pi，Finder 启动时会补上常用的用户/Nix PATH；只有插件页面的明确操作会修改共享的插件设置，不改模型或受保护配置。
 - 默认打开上次用系统选择器选过的项目；首次没有项目时打开家目录，再点“打开文件夹”选项目。
 - 记住窗口位置和大小。“在 Finder 中显示”走经过后台路径校验的原生接口。
 - **不要和 npm start/dev 同时启动**，它们都使用 4317。
@@ -191,7 +206,7 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:4317:127.0.0.1:4317 kenneth@alex
 
 ```bash
 npm run typecheck       # 后台、前端、脚本和 Vite 配置的 TypeScript
-npm test                # 不调用模型：57 组自动测试（含真实 pi 权限/目录映射）
+npm test                # 不调用模型：64 组自动测试（含真实 pi 权限/目录映射及插件管理）
 npm run build           # 构建真实聊天网页
 npm run verify:phase1   # 后台完整验收，包含一次真实模型请求
 npm run verify:phase2   # 真实 Chrome 聊天页 + 终端 pi -r + 生产页面验收
@@ -206,6 +221,7 @@ npm run desktop:build   # 网页、后台打包和未签名的 Mac arm64 应用
 npm run verify:phase6   # Mac 必要验收；不自动验证 Windows
 npm run verify:phase7   # 真实终端同步 + 失效项目/故障/插件提醒 + 深浅截图
 npm run verify:phase8   # 菜单键盘/拖动/确认 + 真实 pi 动态档位和权限 + 深浅截图
+npm run verify:phase9   # 插件页面 + 隔离配置真实安装/卸载、搜索启停和设置合并
 ```
 
 先关闭其他占用 4317 / 5173 的后台。第 2–5 阶段验收使用已安装的 Google Chrome；终端恢复检查还使用 Python 3。Playwright 已固定为开发依赖，不需要下载额外浏览器。日常使用网页不需要 Playwright 或 Python。
@@ -214,7 +230,7 @@ npm run verify:phase8   # 菜单键盘/拖动/确认 + 真实 pi 动态档位和
 
 测试创建临时项目和测试对话，结束时只用 `trash` 把它们移到废纸篓，不动你已有的对话。截图存到忽略提交的 `.pi-desk/verification/`，不会提交口令或私人对话。
 
-具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)、[`第 5 阶段`](docs/phase-5-verification.md)、[`第 6 阶段`](docs/phase-6-verification.md)、[`第 7 阶段`](docs/phase-7-verification.md)、[`第 8 阶段`](docs/phase-8-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
+具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)、[`第 5 阶段`](docs/phase-5-verification.md)、[`第 6 阶段`](docs/phase-6-verification.md)、[`第 7 阶段`](docs/phase-7-verification.md)、[`第 8 阶段`](docs/phase-8-verification.md)、[`第 9 阶段`](docs/phase-9-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
 
 ## 后台协议（给后续开发用）
 
@@ -222,11 +238,15 @@ npm run verify:phase8   # 菜单键盘/拖动/确认 + 真实 pi 动态档位和
 
 | 请求 | 返回 |
 |---|---|
-| `GET /api/health` | `{ok: true, phase: 8, processes: 数量}` |
+| `GET /api/health` | `{ok: true, phase: 9, processes: 数量}` |
 | `GET /api/workspace` | `{cwd: 后台项目根目录, home: 家目录}` |
 | `GET /api/projects` | `{projects: [{cwd, sessions: [{path, id, cwd, title, name?, mtime}]}], activity: [{cwd, sessionPath?, busy}]}` |
 | `POST /api/projects/relocate` | JSON `{cwd,path}`，仅为失效项目设置 App 映射，实际 pi runtime 使用新 cwd |
 | `GET /api/notices` / `POST /api/notices` | 读取已隐藏的类型；写入 `{id,hidden}`，只能操作后台识别过的通知指纹 |
+| `GET /api/plugins` / `/api/plugins/status` | 全局插件列表 / 当前任务和待重载状态 |
+| `GET /api/plugins/search?q=` / `/api/plugins/updates` | 后台查询 npm 目录 / 手动检查更新 |
+| `POST /api/plugins/prepare` / `/api/plugins/confirm` | 手动操作预确认 / 消费一次性确认票据 |
+| `POST /api/plugins/reload` / `/api/plugins/cancel-reload` | 等所有项目空闲后重载 / 取消等待 |
 | `POST /api/check-dir` | JSON `{path}` → `{cwd}`，检查并 realpath，不创建目录 |
 | `POST /api/sessions/delete` | JSON `{path}` → `{ok:true}`，校验普通 pi 会话文件，空闲活动进程先关闭，再 `trash` |
 | `GET /api/tree?cwd=&dir=` | 一层目录，目录在前，过滤隐藏/敏感/越界链接，超过 5000 项提示 |
@@ -257,6 +277,8 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 { op: "rpc_result", reqId, response }
 { op: "event", cwd, record, seq, sessionPath? }
 { op: "session_deleted", cwd, sessionPath }
+{ op: "plugins_reload", state: "waiting" | "loading" | "finished", restarted?, targets? }
+{ op: "process_restarting", cwd }
 { op: "exit", cwd, reason }
 { op: "error", cwd?, reqId?, message, details? }
 ```
@@ -288,4 +310,4 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 
 ## 致谢
 
-- [pi-gui](https://github.com/minghinmatthewlam/pi-gui)（MIT）：第 8 阶段参考其 `apps/desktop/src/features/conversation/model-selector.tsx` 的模型搜索/分组结构及菜单视觉设计，适配在 `src/components/chat/ModelBar.tsx`。来源版本 `faf8edd6d7a7e3bf3c508d6f600a22d3821ac108`；保留 [完整 MIT 许可](docs/licenses/pi-gui-MIT.txt)，桌面 App 也携带该许可。未复制其引擎或整体分层。
+- [pi-gui](https://github.com/minghinmatthewlam/pi-gui)（MIT）：第 8 阶段参考其 `apps/desktop/src/features/conversation/model-selector.tsx` 的模型搜索/分组结构及菜单视觉设计，适配在 `src/components/chat/ModelBar.tsx`。来源版本 `faf8edd6d7a7e3bf3c508d6f600a22d3821ac108`；保留 [完整 MIT 许可](docs/licenses/pi-gui-MIT.txt)，桌面 App 也携带该许可。第 9 阶段还参考 `apps/desktop/src/features/extensions/extensions-view.tsx` 的资源行布局，适配在 `src/components/plugins/PluginsPage.tsx`。未复制其引擎或整体分层。

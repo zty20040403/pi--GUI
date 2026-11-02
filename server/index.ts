@@ -28,6 +28,8 @@ import { NoticeFilter } from "./notices.js";
 import { mappedCwd, projectMappings } from "../shared/project-mapping.js";
 import { MAP_COMMAND, MAP_STATUS } from "../pi-extension/desk-session-map.js";
 import type { UiSnapshot } from "../shared/extensions.js";
+import { setTimeout as delay } from "node:timers/promises";
+import { PluginService, type PluginServiceOptions } from "./plugins.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKSPACE = process.env.PI_DESK_WORKSPACE || ROOT;
@@ -46,7 +48,7 @@ function dataOf(response: RpcRecord): ObjectRecord {
   return isObject(response.data) ? response.data : {};
 }
 
-export type ServerOptions = { pool?: PiPool; development?: boolean; distDir?: string; sessionsDir?: string; syncOptions?: SyncOptions; appSettings?: AppSettings; trash?: (path: string) => Promise<void>; systemOpen?: (path: string, reveal: boolean) => Promise<void> };
+export type ServerOptions = { pluginOptions?: Omit<PluginServiceOptions, "reload" | "appSettings">; pool?: PiPool; development?: boolean; distDir?: string; sessionsDir?: string; syncOptions?: SyncOptions; appSettings?: AppSettings; trash?: (path: string) => Promise<void>; systemOpen?: (path: string, reveal: boolean) => Promise<void> };
 
 export function createDeskServer(options: ServerOptions = {}) {
   const development = options.development ?? process.env.NODE_ENV !== "production";
@@ -64,6 +66,10 @@ export function createDeskServer(options: ServerOptions = {}) {
   const files = new FileService();
   const uploads = new UploadService(files, trash);
   const office = new OfficePreview();
+  let pluginReloadInProgress = false;
+  let pluginReloadPhase: "waiting" | "loading" = "waiting";
+  let activeRpcRequests = 0;
+  const plugins = new PluginService({ ...options.pluginOptions, appSettings: settings, reload: reloadPlugins });
   const systemOpen = options.systemOpen ?? (async (path: string, reveal: boolean) => {
     try { await promisify(execFile)("open", [...(reveal ? ["-R"] : []), path], { timeout: 10000 }); }
     catch { throw new HttpError(500, "系统打开失败，请确认 macOS 可用"); }
@@ -110,6 +116,22 @@ export function createDeskServer(options: ServerOptions = {}) {
     const url = new URL(req.url ?? "/", BASE_URL);
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       if (!auth.checkHttp(req)) return json(res, 401, { error: "未授权" });
+      if (url.pathname.startsWith("/api/plugins")) {
+        if (req.method === "GET" && url.pathname === "/api/plugins") return json(res, 200, await plugins.list(url.searchParams.get("refresh") === "1"));
+        if (req.method === "GET" && url.pathname === "/api/plugins/status") return json(res, 200, plugins.status());
+        if (req.method === "GET" && url.pathname === "/api/plugins/search") return json(res, 200, await plugins.catalog.search(url.searchParams.get("q") ?? ""));
+        if (req.method === "GET" && url.pathname === "/api/plugins/updates") return json(res, 200, await plugins.updates());
+        if (req.method !== "POST") return json(res, 405, { error: "不支持这个插件管理方法" });
+        // 不提供模型工具或 RPC 管理命令；只接收经过鉴权的主页面明确操作。
+        if (!auth.checkUserAction(req)) throw new HttpError(403, "插件变更只能从插件管理页面手动确认");
+        const body = await readJson(req);
+        if (url.pathname === "/api/plugins/prepare") return json(res, 200, await plugins.prepare(body));
+        if (url.pathname === "/api/plugins/confirm") return json(res, 202, plugins.confirm(body.ticket, body.confirmed));
+        if (url.pathname === "/api/plugins/reload") return json(res, 202, plugins.reload());
+        if (url.pathname === "/api/plugins/cancel-reload") { plugins.cancelReload(); return json(res, 200, { ok: true }); }
+        return json(res, 404, { error: "插件接口不存在" });
+      }
+      if (pluginReloadInProgress && req.method === "POST" && !["/api/notices", "/api/check-dir"].includes(url.pathname)) throw new HttpError(409, "插件正在等待重新加载，请先完成或取消重新加载");
       if (req.method === "POST" && url.pathname === "/api/upload") return json(res, 200, await uploads.upload(req, url.searchParams.get("cwd"), url.searchParams.get("name")));
       if (req.method === "POST" && ["/api/open", "/api/reveal"].includes(url.pathname)) {
         const body = await readJson(req);
@@ -174,7 +196,7 @@ export function createDeskServer(options: ServerOptions = {}) {
         } finally { deleting.delete(session.path); }
       }
       if (req.method !== "GET") return json(res, 405, { error: "不支持这个方法" });
-      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 8, processes: pool.size });
+      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 9, processes: pool.size });
       if (url.pathname === "/api/projects") {
         const projects = await listProjects(sessionsDir, await settings.mappings()); sync.watchProjects(projects.map((project) => project.cwd));
         return json(res, 200, { projects, activity: pool.activity });
@@ -224,6 +246,34 @@ export function createDeskServer(options: ServerOptions = {}) {
     if (status !== `${requestId}:ok` || dataOf(await pi.request({ type: "get_state" })).sessionFile !== path) throw new HttpError(500, "pi 未能使用重新指定的文件夹打开对话；没有改写原对话，请查看详情或重试。");
     return { type: "response", success: true, data: { cancelled: false } };
   }
+  async function reloadPlugins(status: (state: "waiting" | "loading") => void, signal: AbortSignal) {
+    pluginReloadInProgress = true; pluginReloadPhase = "waiting"; let restarted = false;
+    broadcast({ op: "plugins_reload", state: "waiting" });
+    try {
+      for (;;) {
+        if (signal.aborted) throw new HttpError(409, "重新加载已取消，没有停止正在回复的项目");
+        if (!pool.idle || opening.size || activeRpcRequests) { await delay(200); continue; }
+        try {
+          pluginReloadPhase = "loading"; status("loading"); broadcast({ op: "plugins_reload", state: "loading" });
+          await pool.restartIdle(async (pi, state) => {
+            restarted = true;
+            if (typeof state.sessionFile === "string") {
+              const exists = await stat(state.sessionFile).then((file) => file.isFile(), (error) => { if (error.code === "ENOENT") return false; throw error; });
+              if (exists && dataOf(await switchSaved(pi, state.sessionFile)).cancelled === true) throw new HttpError(500, "插件已重新加载，但有插件取消了恢复对话；请重新打开原对话。");
+            }
+            const model = state.model as ObjectRecord | undefined;
+            if (typeof model?.provider === "string" && typeof model.id === "string") dataOf(await pi.request({ type: "set_model", provider: model.provider, modelId: model.id }));
+            if (typeof state.thinkingLevel === "string") dataOf(await pi.request({ type: "set_thinking_level", level: state.thinkingLevel }));
+            await pi.request({ type: "get_state" }); await sync.track(pi, true);
+          });
+          break;
+        } catch (error) {
+          if (!restarted && error instanceof HttpError && error.status === 409) { pluginReloadPhase = "waiting"; status("waiting"); broadcast({ op: "plugins_reload", state: "waiting" }); await delay(200); continue; }
+          throw error;
+        }
+      }
+    } finally { pluginReloadInProgress = false; broadcast({ op: "plugins_reload", state: "finished", restarted, targets: pool.activity.map(({ cwd, sessionPath }) => ({ cwd, sessionPath })) }); broadcast({ op: "projects_changed" }); }
+  }
   const diagnostics = new Map<string, string>();
   sync.on("projects_changed", () => broadcast({ op: "projects_changed" }));
   sync.on("external_changed", (cwd: string, state) => broadcast({ op: "session_sync", cwd, state }));
@@ -239,11 +289,12 @@ export function createDeskServer(options: ServerOptions = {}) {
   });
   pool.on("ui_resolved", (cwd: string, id: string, reason: string) => broadcast({ op: "ui_resolved", cwd, id, reason }));
   pool.on("ui_state", (cwd: string, state) => broadcast({ op: "ui_state", cwd, state: uiState(state) }));
-  pool.on("exit", (cwd: string, reason: string) => {
+  pool.on("exit", (cwd: string, reason: string, expected?: boolean) => {
     const tail = diagnostics.get(cwd);
     if (tail) process.stderr.write(`[pi] ${logText(tail)}\n`);
     diagnostics.delete(cwd);
     sync.releaseCwd(cwd);
+    if (expected) { broadcast({ op: "process_restarting", cwd }); return; }
     const info = errorInfo(reason);
     broadcast({ op: "exit", cwd, reason: info.message, details: info.details });
   });
@@ -266,6 +317,10 @@ export function createDeskServer(options: ServerOptions = {}) {
     if (message.op === "rpc" && (typeof message.reqId !== "string" || !isObject(message.cmd) || typeof message.cmd.type !== "string")) throw new Error("rpc 需要 reqId 和 cmd.type");
     if (message.op === "ui_response" && (!isObject(message.payload) || message.payload.type !== "extension_ui_response" || typeof message.payload.id !== "string" || message.reqId !== undefined && typeof message.reqId !== "string")) throw new Error("弹窗回答格式不正确");
     if (message.op === "rpc" && (message.cmd as ObjectRecord).type === "extension_ui_response") throw new Error("弹窗回答请使用 ui_response");
+    if (pluginReloadInProgress && message.op !== "ui_response") {
+      const command = isObject(message.cmd) ? message.cmd.type : undefined;
+      if (pluginReloadPhase === "loading" || message.op === "open" || typeof command !== "string" || !command.startsWith("get_") && !["abort", "clear_queue", "abort_retry", "abort_bash"].includes(command)) throw new HttpError(409, "插件正在等待重新加载，请先完成或取消重新加载；仍可回答插件问题或停止回复。");
+    }
     const pi = await pool.get(message.cwd);
     const cwd = pi.cwd;
     if (message.op === "ui_response") {
@@ -335,6 +390,7 @@ export function createDeskServer(options: ServerOptions = {}) {
   wsServer.on("connection", (ws) => {
     send(ws, { op: "ui_states", states: pool.uiSnapshots.map((row) => ({ ...row, state: uiState(row.state) })) });
     send(ws, { op: "notice_preferences", ...notices.preferences });
+    if (pluginReloadInProgress) send(ws, { op: "plugins_reload", state: pluginReloadPhase });
     ws.on("error", () => ws.terminate());
     ws.on("message", (raw, isBinary) => {
       let message: ObjectRecord;
@@ -345,14 +401,15 @@ export function createDeskServer(options: ServerOptions = {}) {
       } catch {
         return send(ws, { op: "error", message: "请发送 JSON 对象" });
       }
+      activeRpcRequests++;
       void handleMessage(ws, message).catch((error: Error) => {
         const info = errorInfo(error); send(ws, { op: "error", cwd: message.cwd, reqId: message.reqId, message: info.message, details: info.details });
-      });
+      }).finally(() => { activeRpcRequests--; });
     });
   });
 
   return {
-    server, auth, pool,
+    server, auth, pool, plugins,
     async listen() {
       await notices.load();
       await new Promise<void>((done, reject) => {
@@ -361,6 +418,7 @@ export function createDeskServer(options: ServerOptions = {}) {
       });
     },
     async close() {
+      await plugins.close();
       sync.close();
       for (const ws of wsServer.clients) ws.terminate();
       wsServer.close();

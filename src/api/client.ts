@@ -68,6 +68,19 @@ export class RpcClient {
         this.buffered = [];
         this.emit({ kind: "connection", value: "ready" });
         this.resolveOpen(message);
+      } else if (message.op === "process_restarting") {
+        this.emit({ kind: "event", cwd: message.cwd, value: { type: "desk_process_exit" } });
+      } else if (message.op === "plugins_reload") {
+        this.emit({ kind: "event", cwd: "", value: { ...message, type: "desk_plugins_reload" } });
+        if (message.state === "waiting" && this.lastOpened && !this.buffering) this.emit({ kind: "connection", value: "ready" });
+        if (message.state === "loading") this.emit({ kind: "connection", value: "opening" });
+        if (message.state === "finished") {
+          if (message.restarted && this.target) {
+            const restored = message.targets?.find((target: Target) => target.cwd === this.target?.cwd);
+            if (restored) this.target = restored;
+            this.sendOpen();
+          } else this.emit({ kind: "connection", value: this.lastOpened ? "ready" : "offline" });
+        }
       } else if (message.op === "projects_changed") {
         this.emit({ kind: "projects_changed" });
       } else if (message.op === "session_sync") {

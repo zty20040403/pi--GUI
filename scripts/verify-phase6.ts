@@ -26,23 +26,27 @@ async function main() {
       const page = await dev.firstWindow(); await idle(page);
       const security = await dev.evaluate(({ BrowserWindow, app }) => ({ version: process.versions.electron, windows: BrowserWindow.getAllWindows().length, packaged: app.isPackaged }));
       assert.equal(security.version, "35.7.5"); assert.equal(security.windows, 1); assert.equal(security.packaged, false);
-      assert.deepEqual(await page.evaluate(() => Object.keys(window.piDeskDesktop ?? {}).sort()), ["pickDirectory", "reveal"]); assert.equal(await page.evaluate(() => typeof (window as any).require), "undefined");
+      assert.deepEqual(await page.evaluate(() => Object.keys(window.piDeskDesktop ?? {}).sort()), ["openExternal", "pickDirectory", "reveal"]); assert.equal(await page.evaluate(() => typeof (window as any).require), "undefined");
       // 原生函数的调用接线用明确替身，避免自动控制用户的原生文件夹选择器。
       await dev.evaluate(({ dialog, shell }, cwd) => {
         (globalThis as any).nativeCalls = [];
         dialog.showOpenDialog = (async () => { (globalThis as any).nativeCalls.push("pick"); return { canceled: false, filePaths: [cwd] }; }) as typeof dialog.showOpenDialog;
         shell.showItemInFolder = (path) => { (globalThis as any).nativeCalls.push(path); };
+        shell.openExternal = async (url) => { (globalThis as any).nativeCalls.push(url); };
       }, other);
       await page.getByRole("button", { name: "打开文件夹", exact: true }).click(); await idle(page);
       await expect(page.getByRole("treeitem", { name: "预览 other.txt", exact: true })).toBeVisible();
       await page.evaluate(async ({ cwd, path }) => { await window.piDeskDesktop!.reveal(cwd, path); }, { cwd: other, path: join(other, "other.txt") });
       assert.deepEqual(await dev.evaluate(() => (globalThis as any).nativeCalls), ["pick", join(other, "other.txt")]);
       await assert.rejects(page.evaluate(async (cwd) => window.piDeskDesktop!.reveal(cwd, "/etc/hosts"), other), /不允许/);
+      await page.evaluate(() => window.piDeskDesktop!.openExternal("https://github.com/example/pi-plugin"));
+      assert.equal((await dev.evaluate(() => (globalThis as any).nativeCalls)).at(-1), "https://github.com/example/pi-plugin");
+      for (const url of ["file:///etc/hosts", "https://example.invalid", "https://github.com/a/../b"]) await assert.rejects(page.evaluate((url) => window.piDeskDesktop!.openExternal(url), url), /只允许/);
       await dev.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.setBounds({ x: 30, y: 40, width: 1300, height: 800 }); }); await page.waitForTimeout(500);
       const path = await saved(page); if (path) sessions.add(path);
     } finally { await dev.close(); }
     await noBackend(); const preferences = JSON.parse(await readFile(join(devData, "window.json"), "utf8")); assert.equal(preferences.workspace, other); assert.equal(preferences.bounds.width, 1300); assert.ok(!JSON.stringify(preferences).includes("token"));
-    console.log("开发 Electron 入口通过：Finder 最小 PATH、真实 pi 连接、上下文隔离/沙箱、两项原生接线与越界拒绝、窗口位置保存、退出回收后台（无模型调用）。");
+    console.log("开发 Electron 入口通过：Finder 最小 PATH、真实 pi 连接、上下文隔离/沙箱、原生文件/仓库浏览器接线与越界拒绝、窗口位置保存、退出回收后台（无模型调用）。");
     // 真正通过 macOS LaunchServices 打开 .app，等同 Finder 双击，不直接执行包里的二进制。
     const installed = join(root, "installed", "pi desk.app"); await mkdir(join(root, "installed")); await exec("ditto", [appPath, installed]);
     const packagedData = join(root, "packaged-profile"); await mkdir(packagedData); await writeFile(join(packagedData, "window.json"), JSON.stringify({ workspace: project })); const debugPort = await port();

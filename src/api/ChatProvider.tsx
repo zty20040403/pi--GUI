@@ -11,7 +11,7 @@ export type RecordEvent = { cwd: string; record: WireRecord; sessionPath?: strin
 type ContextValue = {
   subscribeRecords: (listener: (event: RecordEvent) => void) => () => void;
   state: ChatState; projects: Project[]; home: string; recents: RecentProject[]; running: Record<string, boolean>;
-  projectsLoading: boolean; projectsError: ErrorValue; switching: boolean; refreshProjects: () => Promise<void>;
+  projectsLoading: boolean; projectsError: ErrorValue; switching: boolean; pluginsReloading: boolean; refreshProjects: () => Promise<void>;
   unavailable?: SessionSummary; showUnavailable: (session: SessionSummary) => void; closeUnavailable: () => void; relocateProject: (cwd: string, path: string) => Promise<void>;
   send: (message: string, behavior?: "steer" | "followUp", attachments?: AttachmentRef[]) => Promise<void>; stop: () => Promise<string[]>;
   changeModel: (provider: string, id: string) => Promise<void>; changeThinking: (level: string) => Promise<void>;
@@ -33,6 +33,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectsError, setProjectsError] = useState<ErrorValue>("");
   const [switching, setSwitching] = useState(false);
+  const [pluginsReloading, setPluginsReloading] = useState(false); const pluginReload = useRef(false);
   const [unavailable, setUnavailable] = useState<SessionSummary>();
   const client = useRef<RpcClient>();
   const recordListeners = useRef(new Set<(event: RecordEvent) => void>());
@@ -115,6 +116,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
       }
       if (event.kind === "event") {
         const record = event.value;
+        if (record.type === "desk_plugins_reload") { pluginReload.current = record.state !== "finished"; setPluginsReloading(pluginReload.current); }
         for (const listener of recordListeners.current) listener({ cwd: event.cwd, record, sessionPath: event.sessionPath, seq: event.seq });
         if (["agent_start", "agent_settled", "desk_process_exit"].includes(record.type)) {
           activityVersion++;
@@ -151,6 +153,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
     return client.current.rpc(current.current.cwd, cmd);
   }
   async function send(message: string, behavior?: "steer" | "followUp", attachments: AttachmentRef[] = []) {
+    if (pluginReload.current) throw new Error("插件正在等待重新加载，请先完成或取消重新加载；仍可停止回复或回答弹窗。");
     if (current.current.externalChanged) throw new Error("这个对话在别处有新消息，请先重新载入再发送。");
     dispatch({ type: "error", value: undefined }); const cwd = current.current.cwd;
     if (message.trim() === "/compact") { if (attachments.length) throw new Error("压缩上下文不需要附件，请先移除附件"); await rpc({ type: "compact" }); await refresh.current(); return; }
@@ -192,7 +195,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
     setRecents((rows) => { const next = rows.filter((row) => row.cwd !== cwd); try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); } catch {} return next; });
     await refreshProjects.current(); await open({ cwd: target.cwd, sessionPath: session?.path });
   }
-  return <Context.Provider value={{ subscribeRecords, state, projects, home, recents, running, projectsLoading, projectsError, switching,
+  return <Context.Provider value={{ subscribeRecords, state, projects, home, recents, running, projectsLoading, projectsError, switching, pluginsReloading,
     unavailable, showUnavailable: (session) => { setUnavailable(session); dispatch({ type: "error", value: undefined }); }, closeUnavailable: () => setUnavailable(undefined), relocateProject,
     refreshProjects: () => refreshProjects.current(), send, stop, changeModel, changeThinking, open, openFolder, renameSession, deleteSession,
     answerUi: async (cwd, payload) => { if (!client.current) throw new Error("尚未连接后台"); await client.current.uiResponse(cwd, payload); },

@@ -20,12 +20,12 @@ function FullAccessConfirmation({ confirm, close }: { confirm: () => void; close
   </dialog>;
 }
 export function ModelBar({ onError }: { onError: (message: ErrorValue) => void }) {
-  const { state, switching, unavailable, changeModel, changeThinking, send } = useChat(); const ui = useExtensionUi();
+  const { state, switching, unavailable, pluginsReloading, changeModel, changeThinking, send } = useChat(); const ui = useExtensionUi();
   const [panel, setPanel] = useState<"model" | "permission">(); const [changing, setChanging] = useState(false); const changingRef = useRef(false);
   const [confirmFull, setConfirmFull] = useState<string>(); const bar = useRef<HTMLDivElement>(null); const scope = `${state.cwd}:${state.session.sessionId}`;
   const permission = modeFromStatus(ui.current.statuses["desk" + "-permissions"]);
-  const locked = switching || state.busy || state.compacting || state.connection !== "ready" || state.externalChanged || !!unavailable;
-  const permissionLocked = switching || state.connection !== "ready" || !permission || state.externalChanged || !!unavailable;
+  const locked = pluginsReloading || switching || state.busy || state.compacting || state.connection !== "ready" || state.externalChanged || !!unavailable;
+  const permissionLocked = pluginsReloading || switching || state.connection !== "ready" || !permission || state.externalChanged || !!unavailable;
   useEffect(() => { setPanel(undefined); setConfirmFull(undefined); }, [scope, unavailable]);
   function returnPermissionFocus() { requestAnimationFrame(() => bar.current?.querySelector<HTMLButtonElement>('[data-testid="permission-trigger"]')?.focus({ preventScroll: true })); }
   async function configure(action: () => Promise<void>) {
