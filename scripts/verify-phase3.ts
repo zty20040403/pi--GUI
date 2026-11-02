@@ -9,6 +9,7 @@ import { BASE_URL } from "../server/auth.js";
 import { logText } from "../server/privacy.js";
 import { SESSION_KEY } from "../src/api/storage.js";
 import { startBackend } from "./server-runner.js";
+import { chooseModel, setThinking, expectModelReady } from "./ui-helpers.js";
 const exec = promisify(execFile);
 const artifacts = resolve(".pi-desk/verification");
 async function run(command: string, args: string[]) {
@@ -26,11 +27,11 @@ async function pageFor(browser: Browser, target: object) {
 async function idle(page: Page) {
   await expect(page.getByTestId("connection-status")).toContainText("已连接", { timeout: 30000 });
   await expect(page.getByRole("button", { name: "停止", exact: true })).toHaveCount(0, { timeout: 180000 });
-  await expect(page.getByLabel("模型", { exact: true })).toBeEnabled({ timeout: 30000 });
+  await expectModelReady(page);
 }
 async function cheap(page: Page) {
-  await idle(page); await page.getByLabel("模型", { exact: true }).selectOption(JSON.stringify(["cliproxy", "gpt-6-luna"])); await idle(page);
-  await page.getByLabel("推理强度").selectOption("low"); await idle(page);
+  await idle(page); await chooseModel(page, "cliproxy", "gpt-6-luna"); await idle(page);
+  await setThinking(page, "low"); await idle(page);
 }
 const row = (page: Page, path: string) => page.locator(`.session-row[data-session-path=${JSON.stringify(path)}]`);
 async function menu(page: Page, path: string, action: string) { const item = row(page, path); if (await item.locator(".session-menu").getAttribute("open") === null) await item.locator("summary").click(); await item.getByRole("button", { name: action, exact: true }).click(); }

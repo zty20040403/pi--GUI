@@ -8,6 +8,7 @@ import { chromium, expect, type Browser, type Page } from "@playwright/test";
 import { logText } from "../server/privacy.js";
 import { SESSION_KEY } from "../src/api/storage.js";
 import { startBackend } from "./server-runner.js";
+import { chooseModel, setThinking, setPermission, expectModelReady } from "./ui-helpers.js";
 import { verifyPermissions } from "./verify-permissions.js";
 const exec = promisify(execFile); const artifacts = resolve(".pi-desk/verification");
 const input = (page: Page) => page.getByLabel("消息", { exact: true });
@@ -15,7 +16,7 @@ const dialog = (page: Page) => page.locator("dialog.extension-dialog");
 async function idle(page: Page) {
   await expect(page.getByTestId("connection-status")).toContainText("已连接", { timeout: 30000 });
   await expect(page.getByRole("button", { name: "停止", exact: true })).toHaveCount(0, { timeout: 180000 });
-  await expect(page.getByLabel("模型", { exact: true })).toBeEnabled({ timeout: 30000 });
+  await expectModelReady(page);
   await expect(page.locator(".send-button").filter({ hasText: "发送中" })).toHaveCount(0, { timeout: 30000 });
 }
 async function send(page: Page, text: string) { await input(page).fill(/^\/\S+$/.test(text) ? `${text} ` : text); await input(page).press("Enter"); }
@@ -45,14 +46,14 @@ async function main() {
     await context.addInitScript(({ key, cwd }) => { if (window === window.top && !sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify({ cwd })); }, { key: SESSION_KEY, cwd: project });
     const page = await context.newPage(); page.on("pageerror", (error) => pageErrors.push(error.message));
     page.on("websocket", (socket) => socket.on("framereceived", ({ payload }) => { try { const message = JSON.parse(payload.toString()); wire.push(message); if (message.cwd === project) { if (message.op === "opened" && message.state.sessionFile) sessions.add(message.state.sessionFile); if (message.sessionPath) sessions.add(message.sessionPath); } } catch {} }));
-    await page.goto(backend.url); await idle(page); await page.getByLabel("模型", { exact: true }).selectOption(JSON.stringify(["cliproxy", "gpt-6-luna"])); await idle(page); await page.getByLabel("推理强度").selectOption("low"); await idle(page);
-    await expect(page.getByLabel("权限模式")).toHaveValue("auto");
+    await page.goto(backend.url); await idle(page); await chooseModel(page, "cliproxy", "gpt-6-luna"); await idle(page); await setThinking(page, "low"); await idle(page);
+    await expect(page.getByTestId("permission-trigger")).toHaveAttribute("data-mode", "auto");
     const rememberCost = async () => { const id = wire.filter((message) => message.op === "opened" && message.cwd === project).at(-1)?.state.sessionId; const text = await page.getByTestId("session-cost").innerText(); if (id) costs.set(id, Number(text.match(/\$([\d.]+)/)?.[1] ?? 0)); };
     const fresh = async () => {
       await idle(page); await rememberCost(); await page.getByRole("button", { name: "新对话", exact: true }).click(); await idle(page);
       // pi 的新 AgentSession 恢复用户默认模型，验收必须逐个重设，不能只设第一次。
-      await page.getByLabel("模型", { exact: true }).selectOption(JSON.stringify(["cliproxy", "gpt-6-luna"])); await idle(page);
-      await page.getByLabel("推理强度").selectOption("low"); await idle(page);
+      await chooseModel(page, "cliproxy", "gpt-6-luna"); await idle(page);
+      await setThinking(page, "low"); await idle(page);
     };
     // 只在测试临时目录里批准必要操作；绝不自动允许危险标题或任意未知命令。
     const approveFixture = async () => {
@@ -142,11 +143,11 @@ async function main() {
     assert.ok([0, 1, 2, 3].every((value) => progress.includes(value)), "必须观察到真实 todo 的逐步完成状态"); await page.reload(); await idle(page); await expect(page.getByTestId("todo-panel")).toContainText("3 / 3 完成"); await page.getByTestId("todo-panel").locator("summary").click(); await expect(page.locator('.todo-panel li[data-status="completed"]')).toHaveCount(3);
     console.log("验收 6/7 通过：真实 read/write/edit 三步完成，todo 从 0→1→2→3 完成并打勾，刷新后从当前分支恢复");
     // 7: 真正模型在页面里触发权限，所有危险操作只拒绝，实际放行只改合成临时文件。
-    await fresh(); await page.getByLabel("权限模式").selectOption("read-only"); await idle(page); const roStart = wire.length;
+    await fresh(); await setPermission(page, "read-only"); await idle(page); const roStart = wire.length;
     await send(page, "请只尝试一次 write 工具创建 readonly-blocked.txt，内容 READONLY TEST。如果权限拒绝，就停止并回复被只读拒绝；不要尝试替代办法。"); await waitReply(page, /只读|拒绝/); await assert.rejects(stat(join(project, "readonly-blocked.txt")), { code: "ENOENT" }); assert.ok(wire.slice(roStart).some((message) => message.record?.type === "tool_execution_end" && message.record.toolName === "write" && message.record.isError));
-    await page.getByLabel("权限模式").selectOption("auto"); await idle(page); await send(page, "请只用 write 工具创建 ../outside/browser-outside.txt，内容 OUTSIDE APPROVED。等待我批准，不用别的工具。"); await expect(dialog(page)).toContainText("修改项目外的文件", { timeout: 180000 }); await dialog(page).getByRole("button", { name: "允许这一次", exact: true }).click(); await waitWithFixtureApprovals(async () => { try { return (await readFile(join(outside, "browser-outside.txt"), "utf8")) === "OUTSIDE APPROVED"; } catch { return false; } }); await idle(page);
+    await setPermission(page, "auto"); await idle(page); await send(page, "请只用 write 工具创建 ../outside/browser-outside.txt，内容 OUTSIDE APPROVED。等待我批准，不用别的工具。"); await expect(dialog(page)).toContainText("修改项目外的文件", { timeout: 180000 }); await dialog(page).getByRole("button", { name: "允许这一次", exact: true }).click(); await waitWithFixtureApprovals(async () => { try { return (await readFile(join(outside, "browser-outside.txt"), "utf8")) === "OUTSIDE APPROVED"; } catch { return false; } }); await idle(page);
     await send(page, "这是一个拒绝操作验收。请只尝试一次 bash 命令 rm -rf ../outside。审批时我会拒绝；收到拒绝后不要再尝试任何工具，只回复用户已拒绝。不要自己执行替代办法。"); await expect(dialog(page)).toContainText("⚠️ 危险操作", { timeout: 180000 }); await expect(dialog(page)).toHaveClass(/danger-dialog/); assert.equal(await page.evaluate(() => document.activeElement?.textContent), "拒绝"); await page.screenshot({ path: join(artifacts, "phase-5-danger-refusal.png") }); await dialog(page).getByRole("button", { name: "拒绝", exact: true }).click(); await waitReply(page, "用户已拒绝"); assert.equal(await readFile(join(outside, "danger-marker.txt"), "utf8"), "DO NOT DELETE THIS FIXTURE");
-    await page.getByLabel("权限模式").selectOption("full"); await idle(page); await send(page, "只用 write 工具创建 full-allowed.txt 内容 FULL FIXTURE，完成回复完全放开验证完成。不要执行其他操作。"); await waitReply(page, "完全放开验证完成"); assert.equal(await readFile(join(project, "full-allowed.txt"), "utf8"), "FULL FIXTURE"); await expect(dialog(page)).toHaveCount(0);
+    await setPermission(page, "full"); await idle(page); await send(page, "只用 write 工具创建 full-allowed.txt 内容 FULL FIXTURE，完成回复完全放开验证完成。不要执行其他操作。"); await waitReply(page, "完全放开验证完成"); assert.equal(await readFile(join(project, "full-allowed.txt"), "utf8"), "FULL FIXTURE"); await expect(dialog(page)).toHaveCount(0);
     console.log(`验收 7/7 通过：页面只读实际拒绝 write，自动对项目外 write 弹窗并批准，危险 rm 标红且拒绝后文件完好，完全放开实际 write 不审批；另真实 pi SDK 工具流水线 ${permissions.cases} 条逐格通过`);
     // 项目目标备用面板：只读读取暂停的合成记录，不创建或驱动真正目标。
     await mkdir(join(project, ".pi/goals"), { recursive: true }); await writeFile(join(project, ".pi/goals/active_goal_fixture.md"), JSON.stringify({ version: 3, id: "paused-fixture", objective: "GOAL PANEL FIXTURE", status: "paused", autoContinue: false, usage: { tokensUsed: 10, activeSeconds: 30 }, taskList: { tasks: [{ id: "one", title: "GOAL TASK FIXTURE", status: "completed" }] } }) + "\n\n# Goal Prompt\nfixture");
@@ -158,7 +159,7 @@ async function main() {
     assert.deepEqual(pageErrors, []); const target = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)!), SESSION_KEY); const cost = [...costs.values()].reduce((sum, value) => sum + value, 0);
     await context.close(); await backend.stop(); backend = undefined; backend = await startBackend({ production: true });
     const production = await browser.newContext({ viewport: { width: 1700, height: 1050 } }); await production.addInitScript(({ key, target }) => { if (window === window.top) sessionStorage.setItem(key, JSON.stringify(target)); }, { key: SESSION_KEY, target });
-    const prod = await production.newPage(); await prod.goto(backend.url); await idle(prod); await expect(prod.locator("article[data-role=assistant]").last()).toContainText("完全放开验证完成"); await expect(prod.getByLabel("权限模式")).toHaveValue("auto"); await production.close();
+    const prod = await production.newPage(); await prod.goto(backend.url); await idle(prod); await expect(prod.locator("article[data-role=assistant]").last()).toContainText("完全放开验证完成"); await expect(prod.getByTestId("permission-trigger")).toHaveAttribute("data-mode", "auto"); await production.close();
     await writeFile(join(artifacts, "phase-5-summary.json"), JSON.stringify({ passed: 7, permissionCases: permissions.cases, chatCost: cost, fixtureApprovals: approvals.length, clipboard: true, uiMethods: true, production: true }, null, 2));
     console.log(`第 5 阶段全部 7 项实际验收通过；真实聊天合计 $${cost.toFixed(6)}；正常生产后台恢复历史且权限重启默认自动，不加载测试命令。`);
   } finally { await browser?.close(); await backend?.stop(); for (const path of sessions) { if (!isAbsolute(path)) continue; try { await stat(path); await exec("trash", [path]); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } } await exec("trash", [root]); }

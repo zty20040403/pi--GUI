@@ -8,8 +8,9 @@ import { promisify } from "node:util";
 import { _electron, chromium, expect, type Page } from "@playwright/test";
 import { SESSION_KEY } from "../src/api/storage.js";
 import { logText } from "../server/privacy.js";
+import { chooseModel, setThinking, expectModelReady } from "./ui-helpers.js";
 const exec = promisify(execFile); const appPath = resolve("release/mac-arm64/pi desk.app"); const artifacts = resolve(".pi-desk/verification");
-async function idle(page: Page) { await expect(page.getByTestId("connection-status")).toContainText("已连接", { timeout: 30000 }); await expect(page.getByLabel("模型", { exact: true })).toBeEnabled({ timeout: 30000 }); }
+async function idle(page: Page) { await expect(page.getByTestId("connection-status")).toContainText("已连接", { timeout: 30000 }); await expectModelReady(page); }
 async function port() { const server = createServer(); await new Promise<void>((done) => server.listen(0, "127.0.0.1", done)); const value = (server.address() as { port: number }).port; await new Promise<void>((done) => server.close(() => done())); return value; }
 async function noBackend() { await expect.poll(async () => { try { await fetch("http://127.0.0.1:4317/"); return false; } catch { return true; } }, { timeout: 10000 }).toBe(true); }
 async function saved(page: Page) { return page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "{}").sessionPath as string | undefined, SESSION_KEY); }
@@ -53,15 +54,16 @@ async function main() {
       await expect.poll(() => browser!.contexts()[0]?.pages().length ?? 0, { timeout: 30000 }).toBeGreaterThan(0);
       const page = browser.contexts()[0].pages()[0]; page.on("pageerror", (error) => errors.push(error.message)); await idle(page);
       await page.getByLabel("搜索对话").fill(root.split("/").at(-1)!);
-      await page.getByLabel("模型", { exact: true }).selectOption(JSON.stringify(["cliproxy", "gpt-6-luna"])); await idle(page); await page.getByLabel("推理强度").selectOption("low"); await idle(page);
+      await chooseModel(page, "cliproxy", "gpt-6-luna"); await idle(page); await setThinking(page, "low"); await idle(page);
       const replies: any[] = []; page.on("websocket", (socket) => socket.on("framereceived", ({ payload }) => { try { const event = JSON.parse(payload.toString()); if (event.record?.type === "message_end" && event.record.message?.role === "assistant") replies.push(event.record.message); } catch {} }));
       // 现有 WS 已建立：通过刷新让监听附在新连接上，再发唯一一次模型请求。
       await page.reload(); await idle(page);
       // 尚未保存的空对话刷新可能被 pi 重新创建；在最后一次刷新之后再确认模型。
-      await page.getByLabel("模型", { exact: true }).selectOption(JSON.stringify(["cliproxy", "gpt-6-luna"])); await idle(page);
-      await page.getByLabel("推理强度").selectOption("low"); await idle(page);
-      await expect(page.getByLabel("模型", { exact: true })).toHaveValue(JSON.stringify(["cliproxy", "gpt-6-luna"]));
-      await expect(page.getByLabel("推理强度")).toHaveValue("low");
+      await chooseModel(page, "cliproxy", "gpt-6-luna"); await idle(page);
+      await setThinking(page, "low"); await idle(page);
+      await expect(page.getByTestId("model-trigger")).toHaveAttribute("data-provider", "cliproxy");
+      await expect(page.getByTestId("model-trigger")).toHaveAttribute("data-model", "gpt-6-luna");
+      await expect(page.getByTestId("model-trigger")).toHaveAttribute("data-thinking", "low");
       await page.getByLabel("消息", { exact: true }).fill("只回复 桌面验收通过，不要工具。"); await page.getByLabel("消息", { exact: true }).press("Enter");
       await expect(page.locator("article[data-role=assistant]").last()).toContainText("桌面验收通过", { timeout: 180000 }); await expect(page.getByRole("button", { name: "停止", exact: true })).toHaveCount(0, { timeout: 30000 }); await idle(page);
       assert.ok(replies.length); for (const reply of replies) { assert.equal(reply.provider, "cliproxy"); assert.equal(reply.model, "gpt-6-luna"); assert.equal(reply.thinkingLevel, "low"); }

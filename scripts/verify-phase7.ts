@@ -11,12 +11,13 @@ import { logText } from "../server/privacy.js";
 import { SESSIONS_DIR } from "../server/sessions.js";
 import { SESSION_KEY } from "../src/api/storage.js";
 import { startBackend } from "./server-runner.js";
+import { chooseModel, setThinking, expectModelReady } from "./ui-helpers.js";
 const exec = promisify(execFile);
 const artifacts = resolve(".pi-desk/verification");
 async function idle(page: Page) {
   await expect(page.getByTestId("connection-status")).toContainText("已连接", { timeout: 30000 });
   await expect(page.getByRole("button", { name: "停止", exact: true })).toHaveCount(0, { timeout: 150000 });
-  await expect(page.getByLabel("模型", { exact: true })).toBeEnabled({ timeout: 30000 });
+  await expectModelReady(page);
 }
 function terminal(cwd: string, dir: string, id: string, marker: string) {
   const child = spawn("python3", ["scripts/check-terminal-sync.py", cwd, dir, id, marker], { env: piEnvironment(), stdio: ["pipe", "pipe", "pipe"] });
@@ -74,7 +75,7 @@ async function main() {
     await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
     console.log("同步验收 2：App/终端同时打开同一对话，终端再发一句；App 黄色提示、按钮/Enter 禁止发送，switch_session 后看到终端回复且草稿保留。");
     // 重新载入以后真正从 App 回复，不能把自己的持久化当成外部写入。
-    await page.getByLabel("模型", { exact: true }).selectOption(JSON.stringify(["cliproxy", "gpt-6-luna"])); await idle(page); await page.getByLabel("推理强度").selectOption("low"); await idle(page);
+    await chooseModel(page, "cliproxy", "gpt-6-luna"); await idle(page); await setThinking(page, "low"); await idle(page);
     await page.getByLabel("消息", { exact: true }).fill("只回复 APP SELF SYNC OK，不要工具。"); await page.getByLabel("消息", { exact: true }).press("Enter");
     await expect(page.locator("article[data-role=assistant]").last()).toContainText("APP SELF SYNC OK", { timeout: 150000 }); await idle(page); await page.waitForTimeout(1000); await expect(page.getByTestId("external-change-banner")).toHaveCount(0);
     assert.deepEqual(errors, []); await writeFile(join(artifacts, "phase-7-sync-summary.json"), JSON.stringify({ terminalNewSession: true, withinFiveSeconds: true, simultaneous: true, blockedButtonAndEnter: true, reloaded: true, draftPreserved: true, selfWriteNotMisclassified: true, pageErrors: 0 }, null, 2));

@@ -8,6 +8,7 @@ import { chromium, expect, type Browser, type Page, type WebSocketRoute } from "
 import { logText } from "../server/privacy.js";
 import { SESSION_KEY, TOKEN_KEY } from "../src/api/storage.js";
 import { startBackend } from "./server-runner.js";
+import { chooseModel, setThinking, expectModelReady, openModelMenu } from "./ui-helpers.js";
 
 const exec = promisify(execFile);
 const ARTIFACTS = resolve(".pi-desk/verification");
@@ -38,7 +39,7 @@ async function setupPage(browser: Browser, target: { cwd: string; sessionPath?: 
 async function idle(page: Page) {
   await expect(page.getByTestId("connection-status")).toContainText("已连接", { timeout: 30000 });
   await expect(page.getByRole("button", { name: "停止", exact: true })).toHaveCount(0, { timeout: 180000 });
-  await expect(page.getByLabel("模型", { exact: true })).toBeEnabled({ timeout: 30000 });
+  await expectModelReady(page);
 }
 async function send(page: Page, message: string) {
   await page.getByLabel("消息", { exact: true }).fill(message);
@@ -172,9 +173,7 @@ async function main() {
     await page.goto(backend.url); await idle(page);
     assert.equal(new URL(page.url()).searchParams.has("token"), false);
     assert.ok(await page.evaluate((key) => !!sessionStorage.getItem(key), TOKEN_KEY));
-    const modelSelect = page.getByLabel("模型", { exact: true }); const thinking = page.getByLabel("推理强度", { exact: true });
-    const luna = JSON.stringify(["cliproxy", "gpt-6-luna"]);
-    await modelSelect.selectOption(luna); await idle(page); await thinking.selectOption("low"); await idle(page);
+    await chooseModel(page, "cliproxy", "gpt-6-luna"); await idle(page); await setThinking(page, "low"); await idle(page);
     const marker = `pi-desk-e2e-${Date.now().toString(36)}`;
     await page.evaluate(() => {
       (window as any).deskSamples = [];
@@ -204,10 +203,11 @@ async function main() {
     assert.ok(commands.some((message) => message.cmd?.type === "abort"));
     assert.ok(wire.slice(beforeStop).some((message) => message.record?.type === "agent_settled" && message.record.aborted === true));
     console.log("验收 3/6 通过：真实回复过程中点击停止，发送 clear_queue + abort 并收到 aborted agent_settled");
-    const alternative = await modelSelect.locator("option").evaluateAll((options, luna) => options.map((option) => (option as HTMLOptionElement).value).find((value) => value && value !== luna), luna);
+    await openModelMenu(page);
+    const alternative = await page.getByRole("menuitemradio").evaluateAll((options) => options.map((element) => ({ provider: (element as HTMLElement).dataset.provider!, id: (element as HTMLElement).dataset.model! })).find((value) => value.provider !== "cliproxy" || value.id !== "gpt-6-luna"));
     assert.ok(alternative, "验收环境需有一个可切换模型");
-    await modelSelect.selectOption(alternative!); await idle(page);
-    await modelSelect.selectOption(luna); await idle(page); await thinking.selectOption("off"); await idle(page); await thinking.selectOption("low"); await idle(page);
+    await chooseModel(page, alternative.provider, alternative.id); await idle(page);
+    await chooseModel(page, "cliproxy", "gpt-6-luna"); await idle(page); await setThinking(page, "off"); await idle(page); await setThinking(page, "low"); await idle(page);
     // 遵循 AGENTS.md，其他模型只切换不发付费请求；实际聊天始终用 luna/low。
     await send(page, "只回复 模型切换验证通过，不要工具。");
     await expect(page.locator("article[data-role=assistant]").last()).toContainText("模型切换验证通过", { timeout: 180000 }); await idle(page);

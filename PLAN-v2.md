@@ -112,6 +112,8 @@ git clone --depth 1 https://github.com/minghinmatthewlam/pi-gui.git refs/pi-gui
 
 ### 第 8 阶段：Codex 式下拉菜单和推理滑杆
 
+已完成并实际验收，记录见 [`docs/phase-8-verification.md`](docs/phase-8-verification.md)。
+
 把输入框底部三个胶囊从"原生下拉框"换成**自己画的弹出菜单**（参考 pi-gui 的 `model-selector`）。
 
 **8.1 通用组件**
@@ -147,10 +149,10 @@ git clone --depth 1 https://github.com/minghinmatthewlam/pi-gui.git refs/pi-gui
 - 给菜单项加 `data-testid`（例如 `model-option-cliproxy-gpt-6-luna`）。
 
 **验收**
-- [ ] 不用鼠标，只用键盘能完成：打开模型菜单 → 搜索 luna → 选中 → 调推理到"低" → 关闭。
-- [ ] 换一个只支持部分档位的模型，滑杆刻度跟着变。
-- [ ] 截图：模型面板（深/浅）、权限菜单（深/浅），看起来不像网页表单。
-- [ ] 第 2–5 阶段验收全部仍然通过。
+- [x] 不用鼠标，只用键盘能完成：打开模型菜单 → 搜索 luna → 选中 → 调推理到"低" → 关闭。
+- [x] 换一个只支持部分档位的模型，滑杆刻度跟着变。（真实 pi 隔离模型：五档→仅 off；浏览器另验两档及六档。）
+- [x] 截图：模型面板（深/浅）、权限菜单（深/浅），看起来不像网页表单。
+- [x] 第 2–5 阶段验收全部仍然通过。
 
 ### 第 9 阶段：插件管理页面
 

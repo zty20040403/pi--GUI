@@ -8,6 +8,7 @@ import { chromium, expect, type Browser, type Page } from "@playwright/test";
 import { logText } from "../server/privacy.js";
 import { SESSION_KEY } from "../src/api/storage.js";
 import { startBackend } from "./server-runner.js";
+import { chooseModel, setThinking, expectModelReady } from "./ui-helpers.js";
 const exec = promisify(execFile); const artifacts = resolve(".pi-desk/verification");
 async function run(command: string, args: string[]) {
   const result = await exec(command, args, { timeout: 90000, maxBuffer: 4 * 1024 * 1024 });
@@ -21,7 +22,7 @@ async function viteReady() {
 async function idle(page: Page) {
   await expect(page.getByTestId("connection-status")).toContainText("已连接", { timeout: 30000 });
   await expect(page.getByRole("button", { name: "停止", exact: true })).toHaveCount(0, { timeout: 180000 });
-  await expect(page.getByLabel("模型", { exact: true })).toBeEnabled({ timeout: 30000 });
+  await expectModelReady(page);
 }
 const panel = (page: Page) => page.getByRole("complementary", { name: "文件面板" });
 const preview = (page: Page) => page.locator(".file-preview");
@@ -93,7 +94,7 @@ async function main() {
     await openPreview(page, "notes.md"); const pollMarker = "POLL REFRESH OK"; await writeFile(join(root, "notes.md"), `# 自动刷新验收\n\n${pollMarker}\n`); await expect(preview(page)).toContainText(pollMarker, { timeout: 15000 });
     await page.getByLabel("搜索对话").fill(""); await folder(page, other); await expect(panel(page).getByRole("tab", { name: "sample.md", exact: true })).toHaveCount(0); await openPreview(page, "notes.md"); await expect(preview(page)).toContainText("OTHER PROJECT ONLY");
     await folder(page, root); await expect(panel(page).getByRole("tab", { name: "sample.md", exact: true })).toHaveCount(1); await panel(page).getByRole("tab", { name: "notes.md", exact: true }).click(); await expect(preview(page)).toContainText(pollMarker);
-    await page.getByLabel("模型", { exact: true }).selectOption(JSON.stringify(["cliproxy", "gpt-6-luna"])); await idle(page); await page.getByLabel("推理强度").selectOption("low"); await idle(page);
+    await chooseModel(page, "cliproxy", "gpt-6-luna"); await idle(page); await setThinking(page, "low"); await idle(page);
     const marker = `AI-REFRESH-${Date.now().toString(36)}`; await ask(page, `请先读取 notes.md，再只用 edit 或 write 工具在它末尾添加一行“${marker}”。不要改其他文件，完成后回复已完成。`);
     await expect(preview(page)).toContainText(marker, { timeout: 180000 }); await idle(page); assert.ok((await readFile(join(root, "notes.md"), "utf8")).includes(marker));
     assert.ok(wire.some((message) => message.record?.type === "tool_execution_end" && ["edit", "write"].includes(message.record.toolName) && !message.record.isError));

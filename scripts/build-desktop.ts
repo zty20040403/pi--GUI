@@ -12,6 +12,7 @@ await mkdir(join(staging, "electron"), { recursive: true }); await mkdir(join(ru
 const packageJson = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 await writeFile(join(staging, "package.json"), JSON.stringify({ name: "pi-desk", productName: "pi desk", version: packageJson.version, description: packageJson.description, author: "pi desk", main: "electron/main.cjs", dependencies: {} }, null, 2));
 await cp(join(root, "electron"), join(staging, "electron"), { recursive: true });
+await cp(join(root, "docs/licenses"), join(staging, "licenses"), { recursive: true });
 await cp(join(root, "dist"), join(runtime, "dist"), { recursive: true });
 await cp(join(root, "pi-extension"), join(runtime, "pi-extension"), { recursive: true });
 // 把纯目录映射辅助代码打进 App 自己的扩展；不引入/打包另一份 pi 引擎。

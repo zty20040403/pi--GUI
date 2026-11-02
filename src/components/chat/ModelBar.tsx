@@ -1,58 +1,72 @@
-import { useState, type ReactNode } from "react";
-import { Brain, ChevronDown, Cpu, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
+// 模型搜索与分组结构改编自 pi-gui (MIT) apps/desktop/src/features/conversation/model-selector.tsx。
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, Cpu, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
 import { modeFromStatus, PERMISSION_LABELS, type PermissionMode } from "../../../shared/extensions";
+import { errorInfo, type ErrorValue } from "../../../shared/errors";
 import { useChat } from "../../api/ChatProvider";
 import { useExtensionUi } from "../../api/ExtensionUiProvider";
-
+import { Popover } from "../ui/Popover";
+import { Menu, type MenuOption } from "../ui/Menu";
+import { ThinkingSlider, LEVEL_LABELS } from "./ThinkingSlider";
 const groupLabel = (provider: string) => provider.toLowerCase() === "cliproxy" ? "CLIProxy" : provider.toLowerCase() === "ninfer" ? "NInfer" : provider;
-const LEVEL_LABELS: Record<string, string> = { off: "关", minimal: "最少", low: "低", medium: "中", high: "高", xhigh: "很高", max: "最高" };
-
-// 外观是胶囊，交互仍是原生 select（透明铺满），键盘、读屏和自动化测试都照常可用。
-function Pill({ icon, label, title, tone, children }: { icon: ReactNode; label: string; title: string; tone?: "danger" | "muted"; children: ReactNode }) {
-  return <label className="pill" title={title} data-tone={tone}>{icon}<span className="pill-label">{label}</span><ChevronDown size={12} className="pill-chevron" aria-hidden />{children}</label>;
+const modelKey = (provider: string, id: string) => JSON.stringify([provider, id]);
+const permissionDescriptions: Record<PermissionMode, string> = { "read-only": "只看不改，不能执行会改东西的命令", auto: "项目里随便改，危险操作先问我", full: "不再审批，请只在可信项目里使用" };
+function FullAccessConfirmation({ confirm, close }: { confirm: () => void; close: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialog.current?.showModal(); return () => dialog.current?.close(); }, []);
+  return <dialog ref={dialog} className="session-dialog permission-confirm" aria-labelledby="full-access-title" onCancel={close}>
+    <h2 id="full-access-title"><ShieldOff size={16} />允许完全放开权限？</h2><p>之后工具可以修改文件、运行命令，不再逐次询问你。只有在信任当前项目和插件时才启用。</p><p className="muted">这不会解除文件预览的范围限制。你可以随时切回“自动”或“只读”。</p>
+    <div className="dialog-actions"><button type="button" autoFocus onClick={close}>取消</button><button type="button" className="danger-button" onClick={confirm}>确认完全放开</button></div>
+  </dialog>;
 }
-
-import { errorInfo, type ErrorValue } from "../../../shared/errors";
 export function ModelBar({ onError }: { onError: (message: ErrorValue) => void }) {
-  const { state, switching, changeModel, changeThinking, send } = useChat();
-  const ui = useExtensionUi();
-  const [changing, setChanging] = useState(false);
+  const { state, switching, unavailable, changeModel, changeThinking, send } = useChat(); const ui = useExtensionUi();
+  const [panel, setPanel] = useState<"model" | "permission">(); const [changing, setChanging] = useState(false); const changingRef = useRef(false);
+  const [confirmFull, setConfirmFull] = useState<string>(); const bar = useRef<HTMLDivElement>(null); const scope = `${state.cwd}:${state.session.sessionId}`;
   const permission = modeFromStatus(ui.current.statuses["desk" + "-permissions"]);
-  const disabled = changing || switching || state.busy || state.compacting || state.connection !== "ready";
+  const locked = switching || state.busy || state.compacting || state.connection !== "ready" || state.externalChanged || !!unavailable;
+  const permissionLocked = switching || state.connection !== "ready" || !permission || state.externalChanged || !!unavailable;
+  useEffect(() => { setPanel(undefined); setConfirmFull(undefined); }, [scope, unavailable]);
+  function returnPermissionFocus() { requestAnimationFrame(() => bar.current?.querySelector<HTMLButtonElement>('[data-testid="permission-trigger"]')?.focus({ preventScroll: true })); }
   async function configure(action: () => Promise<void>) {
-    setChanging(true); onError("");
-    try { await action(); } catch (error) { onError(errorInfo(error)); } finally { setChanging(false); }
+    if (changingRef.current) return;
+    changingRef.current = true; setChanging(true); onError(""); const focused = document.activeElement as HTMLElement | null;
+    try { await action(); } catch (error) { onError(errorInfo(error)); } finally {
+      changingRef.current = false; setChanging(false);
+      requestAnimationFrame(() => { if (focused?.isConnected && (document.activeElement === document.body || document.activeElement === focused)) focused.focus({ preventScroll: true }); });
+    }
   }
-  const model = state.session.model;
+  const model = state.session.model; const level = state.session.thinkingLevel;
   const current = model ? state.models.find((item) => item.provider === model.provider && item.id === model.id) : undefined;
-  const providers = [...new Set(state.models.map((item) => item.provider))];
-  const level = state.session.thinkingLevel;
+  const options: MenuOption[] = state.models.map((item) => ({ id: modelKey(item.provider, item.id), label: item.id, keywords: item.name, group: groupLabel(item.provider), meta: item.cost ? `入 $${item.cost.input} · 出 $${item.cost.output}` : undefined, testId: `model-option-${item.provider}-${item.id}`, data: { "data-provider": item.provider, "data-model": item.id } }));
+  if (model && !current) options.unshift({ id: modelKey(model.provider, model.id), label: model.id, group: groupLabel(model.provider), disabled: true, reason: "不在当前可用列表中，请重新选择" });
   const PermissionIcon = permission === "full" ? ShieldOff : permission === "read-only" ? ShieldCheck : ShieldAlert;
-  return <>
-    <Pill icon={<Cpu size={13} aria-hidden />} label={model ? model.id : "选择模型"} tone={model ? undefined : "muted"}
-      title={current?.cost ? `${current.name || current.id} · 输入 $${current.cost.input}/M · 输出 $${current.cost.output}/M` : "选择模型"}>
-      <select aria-label="模型" disabled={disabled || !state.models.length} value={model ? JSON.stringify([model.provider, model.id]) : ""} onChange={(event) => {
-        const [provider, id] = JSON.parse(event.target.value); void configure(() => changeModel(provider, id));
-      }}>
-        {!model && <option value="">选择模型</option>}
-        {providers.map((provider) => <optgroup key={provider} label={groupLabel(provider)}>{state.models.filter((item) => item.provider === provider).map((item) => <option key={item.id} value={JSON.stringify([provider, item.id])}>
-          {item.id}{item.cost ? `   入 $${item.cost.input} · 出 $${item.cost.output} /M` : ""}
-        </option>)}</optgroup>)}
-      </select>
-    </Pill>
-    <Pill icon={<Brain size={13} aria-hidden />} label={level ? `推理 ${LEVEL_LABELS[level] ?? level}` : "推理"} title="推理强度：越高想得越久、越贵" tone={level ? undefined : "muted"}>
-      <select aria-label="推理强度" value={level ?? ""} disabled={disabled || !state.levels.length} onChange={(event) => void configure(() => changeThinking(event.target.value))}>
-        {!state.levels.length && <option value="">加载中…</option>}
-        {state.levels.map((value) => <option key={value} value={value}>{LEVEL_LABELS[value] ? `${LEVEL_LABELS[value]}（${value}）` : value}</option>)}
-      </select>
-    </Pill>
-    <Pill icon={<PermissionIcon size={13} aria-hidden />} label={permission ? PERMISSION_LABELS[permission] : "权限"} tone={permission === "full" ? "danger" : permission ? undefined : "muted"}
-      title={permission === "full" ? "完全放开：工具不再审批" : permission ? "工具权限；审批不是系统沙箱" : "权限插件尚未加载，工具没有审批保护"}>
-      <select aria-label="权限模式" className="permission-select" data-mode={permission} value={permission ?? ""} disabled={changing || switching || state.connection !== "ready" || !permission}
-        onChange={(event) => void configure(() => send(`/permissions ${event.target.value}`))}>
-        {!permission && <option value="">{state.connection === "ready" ? "插件未加载" : "加载中…"}</option>}
-        {(Object.keys(PERMISSION_LABELS) as PermissionMode[]).map((mode) => <option key={mode} value={mode}>{PERMISSION_LABELS[mode]}{mode === "full" ? "（不审批）" : mode === "auto" ? "（危险操作先问我）" : "（只看不改）"}</option>)}
-      </select>
-    </Pill>
-  </>;
+  async function selectModel(value: string) {
+    if (locked || changingRef.current) return;
+    const [provider, id] = JSON.parse(value); if (model?.provider !== provider || model?.id !== id) await configure(() => changeModel(provider, id));
+    requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[data-testid="model-trigger-panel"] .thinking-slider:not(:disabled)')?.focus({ preventScroll: true }));
+  }
+  function selectPermission(value: string) {
+    if (permissionLocked || changingRef.current) return;
+    setPanel(undefined);
+    if (value === "full" && permission !== "full") { setConfirmFull(scope); return; }
+    returnPermissionFocus(); if (value !== permission) void configure(() => send(`/permissions ${value}`));
+  }
+  return <div ref={bar} className="model-bar">
+    <Popover open={panel === "model"} onOpenChange={(open) => setPanel(open ? "model" : undefined)} label="模型与推理" testId="model-trigger" disabled={locked} tone={model ? undefined : "muted"}
+      attributes={{ "data-provider": model?.provider, "data-model": model?.id, "data-thinking": level, "data-pending": String(changing) }}
+      title={current?.cost ? `${current.name || current.id} · 输入 $${current.cost.input}/M · 输出 $${current.cost.output}/M` : "选择模型和推理强度"}
+      trigger={<><Cpu size={14} aria-hidden /><span className="pill-label">{model?.id ?? "选择模型"}{level ? ` · ${LEVEL_LABELS[level] ?? level}` : ""}</span><ChevronDown size={13} className="pill-chevron" aria-hidden /></>}>
+      <Menu label="模型列表" searchLabel="搜索模型" options={options} selected={model ? modelKey(model.provider, model.id) : undefined} disabled={changing} onSelect={(value) => void selectModel(value)} />
+      <ThinkingSlider key={model ? modelKey(model.provider, model.id) : "empty"} levels={state.levels} level={level} reasoning={model?.reasoning} disabled={locked || changing} onChange={(value) => configure(() => changeThinking(value))} />
+      <div className="menu-footer-note">价格 / 百万 token · 可用性以实际请求为准</div>
+    </Popover>
+    <Popover open={panel === "permission"} onOpenChange={(open) => setPanel(open ? "permission" : undefined)} label="权限模式" testId="permission-trigger" disabled={permissionLocked} tone={permission === "full" ? "danger" : permission ? undefined : "muted"}
+      attributes={{ "data-mode": permission, "data-pending": String(changing) }} title={permission ? "工具权限；审批不是系统沙箱" : "权限插件尚未加载，工具没有审批保护"}
+      trigger={<><PermissionIcon size={14} aria-hidden /><span className="pill-label">{permission ? PERMISSION_LABELS[permission] : "权限未加载"}</span><ChevronDown size={13} className="pill-chevron" aria-hidden /></>}>
+      <Menu label="权限选项" selected={permission} disabled={changing} onSelect={selectPermission} options={(Object.keys(PERMISSION_LABELS) as PermissionMode[]).map((mode) => ({ id: mode, label: PERMISSION_LABELS[mode], description: permissionDescriptions[mode], danger: mode === "full", meta: mode === "auto" ? "推荐" : undefined, testId: `permission-option-${mode}` }))} />
+      <div className="menu-footer-note">审批不是操作系统沙箱</div>
+    </Popover>
+    {confirmFull === scope && <FullAccessConfirmation close={() => { setConfirmFull(undefined); returnPermissionFocus(); }} confirm={() => { setConfirmFull(undefined); returnPermissionFocus(); if (!permissionLocked && confirmFull === scope) void configure(() => send("/permissions full")); }} />}
+  </div>;
 }

@@ -16,6 +16,7 @@
     "test:desktop": "tsx --test scripts/desktop.test.ts",
     "verify:phase6": "tsx scripts/verify-phase6.ts",
     "verify:phase7": "tsx scripts/verify-phase7.ts && tsx scripts/verify-phase7-errors.ts",
+    "verify:phase8": "tsx scripts/verify-menu.ts && tsx scripts/verify-phase8.ts && tsx scripts/verify-phase8-pi.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=1 scripts/backend.test.ts scripts/chat.test.ts scripts/session-actions.test.ts scripts/session-sync.test.ts scripts/project-mapping.test.ts scripts/errors.test.ts scripts/notices.test.ts scripts/project-list.test.ts scripts/files.test.ts scripts/preview.test.ts scripts/uploads.test.ts scripts/attachments.test.ts scripts/extensions.test.ts scripts/test-permissions.ts",
     "smoke": "tsx scripts/smoke.ts",

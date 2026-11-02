@@ -174,7 +174,7 @@ export function createDeskServer(options: ServerOptions = {}) {
         } finally { deleting.delete(session.path); }
       }
       if (req.method !== "GET") return json(res, 405, { error: "不支持这个方法" });
-      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 7, processes: pool.size });
+      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 8, processes: pool.size });
       if (url.pathname === "/api/projects") {
         const projects = await listProjects(sessionsDir, await settings.mappings()); sync.watchProjects(projects.map((project) => project.cwd));
         return json(res, 200, { projects, activity: pool.activity });

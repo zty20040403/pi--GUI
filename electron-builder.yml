@@ -11,6 +11,7 @@ files:
   - electron/preload.cjs
   - electron/runtime.cjs
   - package.json
+  - licenses/**/*
   - '!node_modules/**/*'
 extraResources:
   - from: .pi-desk/desktop-runtime
