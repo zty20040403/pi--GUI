@@ -21,6 +21,7 @@ import { extensionState } from "./extension-state.js";
 import { projectGoals } from "./goals.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const WORKSPACE = process.env.PI_DESK_WORKSPACE || ROOT;
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
@@ -134,9 +135,9 @@ export function createDeskServer(options: ServerOptions = {}) {
         } finally { deleting.delete(session.path); }
       }
       if (req.method !== "GET") return json(res, 405, { error: "不支持这个方法" });
-      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 5, processes: pool.size });
+      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 6, processes: pool.size });
       if (url.pathname === "/api/projects") return json(res, 200, { projects: await listProjects(sessionsDir), activity: pool.activity });
-      if (url.pathname === "/api/workspace") return json(res, 200, { cwd: ROOT, home: homedir() });
+      if (url.pathname === "/api/workspace") return json(res, 200, { cwd: WORKSPACE, home: homedir() });
       return json(res, 404, { error: "接口不存在" });
     }
     if (!development) return serveStatic(req, res, url);

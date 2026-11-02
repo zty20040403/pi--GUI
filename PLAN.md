@@ -377,8 +377,10 @@ ls "$P"   # 重点看 rpc.md、rpc-commands.md、json.md、rpc-extension-ui.md�
    `ssh -L 4317:127.0.0.1:4317 kenneth@alex`，然后在 Mac 上启动 `npm start`，把打印的网址（`127.0.0.1:4317/?token=...`）复制到 Windows 浏览器里打开。
 
 **验收**
-- [ ] 双击 `pi desk.app` 能打开并正常聊天。
-- [ ] 从 Windows 按上面的方法能在浏览器里用。
+- [x] 双击 `pi desk.app` 能打开并正常聊天。
+- [x] 从 Windows 按上面的方法能在浏览器里用。
+
+Mac 已通过 LaunchServices 实际打开应用包、Luna/low 聊天及退出回收；Windows 由 Kenneth 真机操作、反馈收到 AI 回复后完成验收，非代理直接操作 Windows。记录见 [`docs/phase-6-verification.md`](docs/phase-6-verification.md)。
 
 ### 第二期（第一版用顺手之后）
 

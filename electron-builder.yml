@@ -1,0 +1,23 @@
+appId: io.pi-desk.desktop
+productName: pi desk
+electronVersion: 35.7.5
+asar: true
+npmRebuild: false
+directories:
+  app: .pi-desk/desktop-app
+  output: release
+files:
+  - electron/main.cjs
+  - electron/preload.cjs
+  - electron/runtime.cjs
+  - package.json
+  - '!node_modules/**/*'
+extraResources:
+  - from: .pi-desk/desktop-runtime
+    to: runtime
+mac:
+  identity: null
+  category: public.app-category.developer-tools
+  target:
+    - target: dir
+      arch: arm64

@@ -1,4 +1,5 @@
 import { TOKEN_KEY } from "./storage";
+import { desktopBridge } from "./desktop";
 export const TEXT_LIMIT = 1024 * 1024;
 export type FileInfo = { cwd: string; path: string; name: string; size: number; mtime: number; mime: string; binary: boolean; tooLarge: boolean };
 export type TreeEntry = { name: string; path: string; kind: "file" | "directory"; symlink: boolean };
@@ -41,6 +42,8 @@ export async function fileBlob(file: FileInfo, signal?: AbortSignal, api = "file
   return response.blob();
 }
 export async function systemOpen(file: FileInfo, reveal: boolean) {
+  const desktop = desktopBridge();
+  if (reveal && desktop) { await desktop.reveal(file.cwd, file.path); return; }
   await fileRequest(reveal ? "/api/reveal" : "/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cwd: file.cwd, path: file.path }) });
 }
 export function localPath(cwd: string, document: string | undefined, source: string): string {

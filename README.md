@@ -2,7 +2,7 @@
 
 Kenneth 的 pi 图形客户端，底层遥控本机现有的 pi。完整方案见 [`PLAN.md`](PLAN.md)，开发规矩见 [`AGENTS.md`](AGENTS.md)。
 
-**当前进度：第 5 阶段，三栏浏览器版已能聊天、管理对话、预览文件、拖放/粘贴附件、回答插件弹窗，并切换三档工具权限。Mac 应用和 Windows 远程属于第 6 阶段，尚未完成。**
+**当前进度：第一版六个阶段已完成。Mac 应用通过实际启动/聊天验收；Windows SSH 远程使用由 Kenneth 在真机操作并反馈收到回复。三栏界面、对话管理、文件预览、附件、插件弹窗和三档工具权限均已实现。**
 
 ## 怎么打开试
 
@@ -24,7 +24,7 @@ npm run dev
 
 默认项目是这个仓库的文件夹。左边按项目列出和终端共用的对话：
 
-- **打开文件夹**：填已存在文件夹的绝对路径（也支持 `~/`），或点“最近用过”填入路径，再点“打开”。
+- **打开文件夹**：浏览器里填已存在文件夹的绝对路径（也支持 `~/`），或用最近项目；Mac 应用里直接用系统文件夹选择器。
 - **新对话**：在当前项目开始新的对话；项目名旁的 `＋` 则在那个项目新建。
 - **打开旧对话**：直接点对话，自动切换到它所属的项目和历史。换标签页后也可以从左边找回来。
 - **改名/删除**：点对话旁 `⋯`。改名会同步到终端；删除要确认，使用 macOS 废纸篓，不永久删除。顶部对话标题也能点击改名。
@@ -119,6 +119,61 @@ npm start
 
 目前需要 Node.js 22 或更新版本、npm 和已配置好的 pi `1.4.0` 接口。测试用模型需有 `cliproxy/gpt-6-luna`。验收脚本清理临时文件使用 macOS `trash`。
 
+## Mac 应用
+
+本机已安装到 **`~/Applications/pi desk.app`**。Finder 按 `Cmd+Shift+G`，输入 `~/Applications`，找到应用双击打开。第一次被系统拦住时，右键 → 打开；若系统询问访问项目文件夹权限，按你的意愿允许。应用未签名、未公证，只构建 Apple 芯片版。
+
+- 启动时自己运行后台，不需要另外开终端；关窗口或退出时回收后台。
+- 仍使用你现有的 Node.js/pi，不改模型、插件或配置；Finder 启动时会补上常用的用户/Nix PATH。
+- 默认打开上次用系统选择器选过的项目；首次没有项目时打开家目录，再点“打开文件夹”选项目。
+- 记住窗口位置和大小。“在 Finder 中显示”走经过后台路径校验的原生接口。
+- **不要和 npm start/dev 同时启动**，它们都使用 4317。
+
+要从源码重新打包，在 Mac 运行：
+
+```bash
+cd ~/Desktop/"pi harness"
+npm ci
+npm run desktop:build
+mkdir -p ~/Applications
+ditto "release/mac-arm64/pi desk.app" ~/Applications/"pi desk.app"
+```
+
+更新前先退出旧应用。`npm run build && npm run desktop` 可运行开发桌面入口。如果 npm 的 Electron 解压未完成，执行 `npm run desktop:install` 补齐经官方校验的本机运行文件。
+
+## 从 Windows 远程用
+
+这是 **Windows 浏览器访问 Mac 后台**，不是 Windows 上安装 Electron；项目文件、工具和对话仍在 Mac。两台电脑要能通过 SSH 连通。
+
+**1. Mac 上关闭桌面应用，打开终端：**
+
+```bash
+cd ~/Desktop/"pi harness"
+npm run build  # 代码更新后执行一次；已构建则可以省略
+npm start
+```
+
+保持终端开着，保留它打印的完整网址（带 `?token=...`）。不要公开或发给别人。
+
+**2. Windows 打开 PowerShell：**
+
+```powershell
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:4317:127.0.0.1:4317 kenneth@alex
+```
+
+`alex` 换成你平时连接这台 Mac 用的主机名。首次连接要核对主机指纹，不关闭 SSH 的主机身份检查；需要密码时输入 Mac 账号密码，输入过程中不会显示字符。登录成功后保持空白是正常的，不要关闭窗口。
+
+**3. Windows Chrome/Edge 地址栏打开 Mac 打印的完整网址。** 必须带口令，不能只打开没有口令的首页。后台收到的 Host/Origin 仍为本机 4317，无需放宽安全检查或开放公网端口。选 `gpt-6-luna` / `low`，发一句“只回复 Windows 验收通过，不用工具”。
+
+用完后，Windows SSH 窗口和 Mac 后台终端都按 `Ctrl+C`。
+
+- **Could not resolve hostname**：确认主机名，使用你已有的 SSH 连接方式，不需要把地址写入代码。
+- **Connection refused / timed out**：确认 Mac 在线、网络能互通，系统设置 → 通用 → 共享中已开启“远程登录”，并允许该用户。不要擅自放开路由器公网端口。
+- **Permission denied**：检查登录账号、密码或现有密钥配置，不要发送密码/私钥给别人。
+- **Address already in use / cannot listen to port**：Windows 本地 4317 已占用，先关闭旧 SSH 转发或占用该端口的程序。不要随意改转发端口，否则 Host 校验会拒绝。
+- **未授权 / 401**：用 Mac 后台本次打印的完整网址；重启后台会换口令。
+- **网页打不开**：先看 SSH 有没有报错，再确认 Mac 的 npm start 还运行着，且没有同时启动桌面应用。
+
 ## 检查和完整验收
 
 ```bash
@@ -133,6 +188,9 @@ npm run verify:phase5   # 附件/插件/计划/清单/三档权限，真实 Chro
 npm run test:permissions # 纯规则、授权范围、路径及真实 pi 权限菜单
 npx tsx scripts/verify-permissions.ts # 真 pi 工具流水线 105 条；危险执行器为测试替身
 npm run fixtures        # 重新生成完全合成的测试文件（不读取私人文件）
+npm run test:desktop    # 4 组桌面专用安全/配置测试，无模型调用
+npm run desktop:build   # 网页、后台打包和未签名的 Mac arm64 应用
+npm run verify:phase6   # Mac 必要验收；Windows 仍需人工真机确认
 ```
 
 先关闭其他占用 4317 / 5173 的后台。第 2–5 阶段验收使用已安装的 Google Chrome；终端恢复检查还使用 Python 3。Playwright 已固定为开发依赖，不需要下载额外浏览器。日常使用网页不需要 Playwright 或 Python。
@@ -141,7 +199,7 @@ npm run fixtures        # 重新生成完全合成的测试文件（不读取私
 
 测试创建临时项目和测试对话，结束时只用 `trash` 把它们移到废纸篓，不动你已有的对话。截图存到忽略提交的 `.pi-desk/verification/`，不会提交口令或私人对话。
 
-具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)、[`第 5 阶段`](docs/phase-5-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
+具体记录：[`第 1 阶段`](docs/phase-1-verification.md)、[`第 2 阶段`](docs/phase-2-verification.md)、[`第 3 阶段`](docs/phase-3-verification.md)、[`第 4 阶段`](docs/phase-4-verification.md)、[`第 5 阶段`](docs/phase-5-verification.md)、[`第 6 阶段`](docs/phase-6-verification.md)。旧的命令行 `npx tsx scripts/smoke.ts` 仍可单独跑，会自行启动后台；已有后台时用 `PI_DESK_URL='这里粘贴完整启动网址' npx tsx scripts/smoke.ts`。
 
 ## 后台协议（给后续开发用）
 
@@ -149,7 +207,7 @@ npm run fixtures        # 重新生成完全合成的测试文件（不读取私
 
 | 请求 | 返回 |
 |---|---|
-| `GET /api/health` | `{ok: true, phase: 5, processes: 数量}` |
+| `GET /api/health` | `{ok: true, phase: 6, processes: 数量}` |
 | `GET /api/workspace` | `{cwd: 后台项目根目录, home: 家目录}` |
 | `GET /api/projects` | `{projects: [{cwd, sessions: [{path, id, cwd, title, name?, mtime}]}], activity: [{cwd, sessionPath?, busy}]}` |
 | `POST /api/check-dir` | JSON `{path}` → `{cwd}`，检查并 realpath，不创建目录 |
@@ -203,6 +261,6 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 - **找不到模型 / 请求报错**：先在终端 pi 里确认 `cliproxy/gpt-6-luna` 能用。本项目不替你改模型配置；新对话按 pi 的默认配置，新建后请重新确认模型和推理档位。
 - **旧对话的思考耗时**：pi 没保存耗时就只显示“思考过程”，不会编造 N 秒；当前流式回复会计时。
 - **旧项目目录已不存在**：会话仍在列表中，也可移到废纸篓；要继续聊天，需先恢复/提供原项目目录。
-- **还没做**：第 6 阶段 Electron 和 Windows 远程；系统级通知、文件改动汇总等第二期功能。当前只有标题提醒，没有系统通知。
-- **未验证**：Safari、Windows、桌面应用及装好 LibreOffice 后的隔离转换；系统打开/Finder 接线在自动测试中验证参数与路径校验，没有自动启动用户的 GUI 应用。当前实际验收浏览器是这台 Mac 的 Chrome。
-- **依赖审计**：当前仍有 **13 项告警：11 moderate、2 high**，涉及 Vite 开发链、ExcelJS 存档依赖和 SDK 开发依赖的 undici。SDK 不打入网页，也不作为生产后台的发动机；生产服务不运行 Vite 开发服务器。仍需独立升级/回归，不能宣称审计全绿；没有用 `npm audit fix --force` 跨越方案版本。只在本机可信项目使用，不暴露到公网。
+- **还没做**：系统级通知、文件改动汇总等第二期功能。当前只有标题提醒，没有系统通知；Electron 无自动更新。
+- **未验证**：Safari、Intel Mac 及装好 LibreOffice 后的隔离转换。Windows SSH/浏览器由 Kenneth 真机反馈通过，非代理自动操作。Mac Electron 已实际启动/聊天，Finder 显示已实际调用；系统默认软件打开仍只检查参数接线，没自动启动用户的其他 GUI 应用。
+- **依赖审计**：当前仍有 **27 项告警：23 moderate、4 high**，涉及 Vite 开发链、ExcelJS、SDK、Electron 和打包链。Electron 35 是方案指定的旧版本，不应认为仍有持续安全维护；主窗口为兼容隔离 HTML 开关保留 CSP unsafe-inline，也不能宣称完全防 XSS。SDK 不作为生产发动机，打包不包含开发 node_modules，但这不等于告警无风险。需独立升级/回归，没有用 `npm audit fix --force` 擅自跨大版本。只在本机可信项目使用，不暴露到公网。

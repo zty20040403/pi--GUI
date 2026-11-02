@@ -1,5 +1,6 @@
 node_modules/
 dist/
+release/
 .pi-desk/
 refs/
 .pi/

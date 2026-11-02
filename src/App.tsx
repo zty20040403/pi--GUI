@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { modeFromStatus, PERMISSION_LABELS, type PermissionMode } from "../shared/extensions";
 import { useChat } from "./api/ChatProvider";
+import { desktopBridge } from "./api/desktop";
 import { useExtensionUi } from "./api/ExtensionUiProvider";
 import { useGoals } from "./api/GoalProvider";
 import { ExtensionDialogs, ExtensionToasts } from "./components/dialogs/ExtensionDialogs";
@@ -51,13 +52,18 @@ export default function App() {
     setChanging(true); setError("");
     try { await action(); } catch (error) { setError((error as Error).message); } finally { setChanging(false); }
   }
+  function requestDialog(request: SessionDialogRequest) {
+    const desktop = desktopBridge();
+    if (request.kind === "folder" && desktop) void configure(async () => { const directory = await desktop.pickDirectory(); if (directory) await open({ cwd: directory.cwd }); });
+    else setDialog(request);
+  }
   const grouped = [...new Set(state.models.map((model) => model.provider))];
   const connection = { connecting: "连接中…", opening: "打开对话…", ready: "已连接", reconnecting: "连接断开，正在自动重连…", offline: "pi 已退出" }[state.connection];
   const elapsed = state.waitingSince ? Math.max(0, Math.floor((now - state.waitingSince) / 1000)) : 0;
   const usage = state.stats.contextUsage;
   const closeSidebar = () => setLayout((value) => ({ ...value, open: false }));
   return <div className="desk-layout" style={{ "--sidebar-width": `${layout.width}px`, "--file-width": `${files.width}px` } as CSSProperties}>
-    <SessionSidebar hidden={!layout.open} onDialog={setDialog} onClose={closeSidebar} />
+    <SessionSidebar hidden={!layout.open} onDialog={requestDialog} onClose={closeSidebar} />
     {layout.open && <><button className="sidebar-backdrop" aria-label="关闭对话列表遮罩" onClick={closeSidebar} /><div className="sidebar-resizer" role="separator" aria-label="调整对话列表宽度" aria-orientation="vertical" aria-valuemin={220} aria-valuemax={460} aria-valuenow={layout.width} tabIndex={0}
       onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)} onPointerMove={(event) => {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) setLayout((value) => ({ ...value, width: Math.max(220, Math.min(460, event.clientX)) }));

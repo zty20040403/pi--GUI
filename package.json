@@ -4,10 +4,17 @@
   "private": true,
   "description": "A Codex-style desktop client for the pi coding agent",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"tsx watch server/index.ts\" \"vite\"",
     "build": "vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
+    "postinstall": "node electron/install.cjs",
+    "desktop:install": "node electron/install.cjs",
+    "desktop": "electron .",
+    "desktop:build": "npm run build && tsx scripts/build-desktop.ts && electron-builder --config electron-builder.yml --mac --arm64 --dir",
+    "test:desktop": "tsx --test scripts/desktop.test.ts",
+    "verify:phase6": "tsx scripts/verify-phase6.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=1 scripts/backend.test.ts scripts/chat.test.ts scripts/session-actions.test.ts scripts/project-list.test.ts scripts/files.test.ts scripts/preview.test.ts scripts/uploads.test.ts scripts/attachments.test.ts scripts/extensions.test.ts scripts/test-permissions.ts",
     "smoke": "tsx scripts/smoke.ts",
@@ -49,6 +56,9 @@
     "@types/ws": "8.5.13",
     "@vitejs/plugin-react": "4.3.4",
     "concurrently": "9.1.0",
+    "electron": "35.7.5",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
     "typescript": "5.6.3",
     "vite": "5.4.21"
   }
