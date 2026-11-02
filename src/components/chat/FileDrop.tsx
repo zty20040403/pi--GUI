@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AtSign, Upload } from "lucide-react";
 import { useAttachments } from "../../api/AttachmentProvider";
 import { PATH_DRAG_TYPE, treeDrag } from "../../api/attachments";
 import { useChat } from "../../api/ChatProvider";
@@ -26,5 +27,5 @@ export function FileDrop() {
     window.addEventListener("dragenter", enter); window.addEventListener("dragleave", leave); window.addEventListener("dragover", over); window.addEventListener("drop", drop); window.addEventListener("dragend", clear); window.addEventListener("blur", clear);
     return () => { window.removeEventListener("dragenter", enter); window.removeEventListener("dragleave", leave); window.removeEventListener("dragover", over); window.removeEventListener("drop", drop); window.removeEventListener("dragend", clear); window.removeEventListener("blur", clear); };
   }, []);
-  return kind ? <div className="file-drop-overlay" role="status"><div><span>{kind === "path" ? "@" : "↓"}</span><strong>{kind === "path" ? "松手插入文件路径" : "松手添加到对话"}</strong><p>{kind === "path" ? "直接引用项目文件，不重复上传" : "每个文件最多 50 MB · 添加后写下问题再发送"}</p></div></div> : null;
+  return kind ? <div className="file-drop-overlay" role="status"><div><span className="drop-icon">{kind === "path" ? <AtSign size={22} /> : <Upload size={22} />}</span><strong>{kind === "path" ? "松手插入文件路径" : "松手添加到对话"}</strong><p>{kind === "path" ? "直接引用项目文件，不重复上传" : "每个文件最多 50 MB · 添加后写下问题再发送"}</p></div></div> : null;
 }

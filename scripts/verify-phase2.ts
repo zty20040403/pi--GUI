@@ -143,7 +143,7 @@ async function mockBrowserTests(browser: Browser) {
     await page.getByRole("button", { name: "回到底部 ↓" }).click();
     await expect.poll(() => page.getByTestId("messages-scroll").evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight)).toBeLessThan(80);
     await page.emulateMedia({ colorScheme: "dark" });
-    const background = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim()); assert.equal(background, "#191b19");
+    const background = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim()); assert.equal(background, "#161616");
     await page.setViewportSize({ width: 600, height: 800 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "窄窗口不应横向溢出");
     console.log("浏览器补充测试通过：Markdown/复制、安全 HTML、折叠/失败卡片、IME、换行、插话/排队/Esc、网络等待/重试、插件状态、滚动和深浅色/窄窗口");

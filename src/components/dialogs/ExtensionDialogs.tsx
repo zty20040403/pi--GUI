@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { CircleAlert, FolderClosed, Info, TriangleAlert, X } from "lucide-react";
 import { useChat } from "../../api/ChatProvider";
 import { useExtensionUi, type PendingDialog } from "../../api/ExtensionUiProvider";
 import { plainUi } from "../../api/extension-ui-state";
@@ -18,7 +19,7 @@ function Dialog({ request, remaining }: { request: PendingDialog; remaining: num
     try { await answer(request, payload); } catch (error) { setError((error as Error).message); setPending(false); }
   }
   return <dialog ref={element} className={`session-dialog extension-dialog ${danger ? "danger-dialog" : ""}`} aria-labelledby={titleId} onCancel={(event) => { event.preventDefault(); void reply({ cancelled: true }); }}>
-    <div className="dialog-project" title={request.cwd}>项目：{request.cwd.split("/").filter(Boolean).at(-1) || request.cwd}{remaining > 0 && <span> · 后面还有 {remaining} 个提问</span>}</div>
+    <div className="dialog-project" title={request.cwd}><FolderClosed size={12} aria-hidden />{request.cwd.split("/").filter(Boolean).at(-1) || request.cwd}{remaining > 0 && <span> · 后面还有 {remaining} 个提问</span>}</div>
     <h2 id={titleId}>{plainUi(request.title ?? "插件需要你的回答")}</h2>
     {request.message && <p className="extension-message">{plainUi(request.message)}</p>}
     {request.method === "select" ? <div className="extension-options">{(request.options ?? []).map((option, index) => <button key={`${index}:${option}`} type="button" autoFocus={danger ? option === "拒绝" : index === 0} disabled={pending || !connected} onClick={() => void reply({ value: option })}>{plainUi(option)}</button>)}</div>
@@ -32,5 +33,5 @@ function Dialog({ request, remaining }: { request: PendingDialog; remaining: num
 export function ExtensionDialogs() { const { pending } = useExtensionUi(); return pending[0] ? <Dialog key={`${pending[0].cwd}:${pending[0].id}`} request={pending[0]} remaining={pending.length - 1} /> : null; }
 export function ExtensionToasts() {
   const { toasts, dismiss } = useExtensionUi();
-  return <div className="extension-toasts" aria-live="polite">{toasts.map((toast) => <div key={toast.id} className={`extension-toast toast-${toast.level}`} role={toast.level === "error" ? "alert" : "status"}><strong>{toast.level === "error" ? "插件错误" : toast.level === "warning" ? "插件提醒" : "插件通知"}</strong><button aria-label="关闭插件通知" onClick={() => dismiss(toast.id)}>×</button><p>{toast.message}</p><small>{toast.cwd.split("/").filter(Boolean).at(-1)}</small></div>)}</div>;
+  return <div className="extension-toasts" aria-live="polite">{toasts.map((toast) => <div key={toast.id} className={`extension-toast toast-${toast.level}`} role={toast.level === "error" ? "alert" : "status"}><strong>{toast.level === "error" ? <CircleAlert size={13} aria-hidden /> : toast.level === "warning" ? <TriangleAlert size={13} aria-hidden /> : <Info size={13} aria-hidden />}{toast.level === "error" ? "插件错误" : toast.level === "warning" ? "插件提醒" : "插件通知"}</strong><button className="icon-button small" aria-label="关闭插件通知" onClick={() => dismiss(toast.id)}><X size={12} /></button><p>{toast.message}</p><small>{toast.cwd.split("/").filter(Boolean).at(-1)}</small></div>)}</div>;
 }

@@ -2,7 +2,9 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 
 export const HOST = "127.0.0.1";
-export const PORT = 4317;
+// PI_DESK_PORT 只用于同时再开一份（比如开发时不打扰正在用的后台）；默认仍是 4317。
+const customPort = Number(process.env.PI_DESK_PORT);
+export const PORT = Number.isInteger(customPort) && customPort > 1024 && customPort < 65536 ? customPort : 4317;
 export const BASE_URL = `http://${HOST}:${PORT}`;
 
 export class DeskAuth {

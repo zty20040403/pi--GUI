@@ -30,6 +30,7 @@
     "dompurify": "3.4.17",
     "exceljs": "4.4.0",
     "katex": "0.19.1",
+    "lucide-react": "1.53.0",
     "mammoth": "1.13.0",
     "mermaid": "11.17.2",
     "papaparse": "5.5.3",

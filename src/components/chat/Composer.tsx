@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { ArrowUp, Plus, ShieldOff, Square } from "lucide-react";
 import { modeFromStatus } from "../../../shared/extensions";
 import { useChat } from "../../api/ChatProvider";
 import { useAttachments } from "../../api/AttachmentProvider";
@@ -7,6 +8,14 @@ import { blocksOf } from "../../api/state";
 import { AttachmentBar } from "./AttachmentBar";
 import { useExtensionUi } from "../../api/ExtensionUiProvider";
 import { GoalPanel, TodoPanel, WidgetPanels } from "./ExtensionPanels";
+import { ModelBar } from "./ModelBar";
+
+export const PREFILL_EVENT = "pi-desk:prefill";
+export function shortNumber(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  return String(value);
+}
 
 export function Composer() {
   const { state, send, stop, clearError } = useChat();
@@ -15,6 +24,7 @@ export function Composer() {
   const [sending, setSending] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState("");
+  const [configError, setConfigError] = useState("");
   const [selected, setSelected] = useState(0);
   const [hideCommands, setHideCommands] = useState(false);
   const lastSubmitted = useRef("");
@@ -35,6 +45,16 @@ export function Composer() {
     const editor = ui.current.editor; const key = `${state.cwd}:${editor?.id}`;
     if (editor && seenEditor.current !== key) { seenEditor.current = key; setDraft(editor.text); setHideCommands(false); input.current?.focus(); }
   }, [state.cwd, ui.current.editor?.id]);
+  // 欢迎页的示例问题通过事件把文字放进输入框。
+  useEffect(() => {
+    const prefill = (event: Event) => { const text = (event as CustomEvent<string>).detail; if (typeof text === "string") { setDraft(text); setHideCommands(true); input.current?.focus(); } };
+    window.addEventListener(PREFILL_EVENT, prefill); return () => window.removeEventListener(PREFILL_EVENT, prefill);
+  }, []);
+  // 输入框随内容长高，最高 260px 后滚动。
+  useLayoutEffect(() => {
+    const element = input.current; if (!element) return;
+    element.style.height = "auto"; element.style.height = `${Math.min(element.scrollHeight, 260)}px`;
+  }, [draft]);
   const available = [...state.commands, ...(state.commands.some((command) => command.name === "compact") ? [] : [{ name: "compact", description: "手动压缩当前上下文", source: "client" }])];
   const commands = !hideCommands && /^\/[^\s]*$/.test(draft) ? available.filter((command) => command.name.toLowerCase().includes(draft.slice(1).toLowerCase())).slice(0, 12) : [];
   const ready = state.connection === "ready";
@@ -90,7 +110,12 @@ export function Composer() {
   const historicalPrompt = [...state.messages].reverse().find((message) => message.role === "user");
   const retryText = lastSubmitted.current || (historicalPrompt ? blocksOf(historicalPrompt).filter((block) => block.type === "text").map((block) => block.text).join("\n") : "");
   const retryAttachments = lastSubmitted.current ? lastAttachments.current : [...retryText.matchAll(/^附件：(\.pi-desk\/uploads\/[^\n]+)$/gm)].map((match) => ({ kind: "upload" as const, path: match[1] }));
+  const permission = modeFromStatus(ui.current.statuses["desk" + "-permissions"]);
+  const usage = state.stats.contextUsage;
+  const canSend = ready && (!!draft.trim() || attachmentRefs(attachments.items).length > 0) && !sending && !pendingAttachment;
+  const statuses = Object.entries(ui.current.statuses).filter(([key]) => key !== "desk" + "-permissions");
   return <section className="composer-section">
+    {configError && <div className="composer-error" role="alert"><span>{configError}</span><button onClick={() => setConfigError("")}>关闭</button></div>}
     {attachments.error && <div className="error-banner" role="alert"><span>{attachments.error}</span><button onClick={attachments.clearError}>关闭提示</button></div>}
     {(error || state.error) && <div className="error-banner" role="alert"><span>{error || state.error}</span><div>
       {retryText && <button disabled={!ready || state.busy || sending} onClick={() => { clearError(); void submit(undefined, retryText, retryAttachments); }}>重试</button>}
@@ -106,17 +131,29 @@ export function Composer() {
       {commands.length > 0 && <div className="command-menu" role="listbox" aria-label="斜杠命令">{commands.map((command, index) => <button role="option" aria-selected={index === Math.min(selected, commands.length - 1)} key={command.name} onClick={() => pick(index)}>
         <strong>/{command.name}</strong><span>{command.description || command.source}</span>
       </button>)}</div>}
-      <textarea ref={input} aria-label="消息" placeholder={state.busy ? "继续输入：Enter 插话，Alt+Enter 做完再做" : "给 pi 发消息…（输入 / 查看命令）"} value={draft} onKeyDown={onKey} onChange={(event) => {
+      <AttachmentBar />
+      <textarea ref={input} rows={1} aria-label="消息" placeholder={state.busy ? "补充要求：Enter 插话，Option+Enter 做完再做" : "给 pi 发消息，输入 / 查看命令"} value={draft} onKeyDown={onKey} onChange={(event) => {
         setDraft(event.target.value); setSelected(0); setHideCommands(false);
       }} onPaste={(event) => { const images = [...event.clipboardData.items].filter((item) => item.kind === "file" && item.type.startsWith("image/")).map((item) => item.getAsFile()).filter((file): file is File => !!file); if (images.length) { event.preventDefault(); attachments.addFiles(images); } }} />
-      <AttachmentBar />
       <input type="file" multiple hidden ref={fileInput} aria-label="选择附件文件" onChange={(event) => { attachments.addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
-      <div className="composer-actions"><button className="quiet-button" aria-label="添加附件" disabled={!ready} onClick={() => fileInput.current?.click()}>＋ 附件</button><span className="input-hint">{state.busy ? "Enter 插话 · Alt+Enter 排队 · Esc 停止" : "Enter 发送 · Shift+Enter 换行"}</span><div>
-        {(state.busy || state.compacting) && <button className="stop-button" disabled={!ready || stopping} onClick={() => void abort()}>{stopping ? "正在停止…" : "停止"}</button>}
-        <button className="send-button" disabled={!ready || (!draft.trim() && !attachmentRefs(attachments.items).length) || sending || pendingAttachment} onClick={() => void submit()}>{sending ? "发送中…" : state.busy ? "插话 ↑" : "发送 ↑"}</button>
-      </div></div>
+      <div className="composer-toolbar">
+        <div className="toolbar-left">
+          <button className="icon-button" aria-label="添加附件" title="添加附件（也可以直接拖文件进窗口或粘贴截图）" disabled={!ready} onClick={() => fileInput.current?.click()}><Plus size={16} /></button>
+          <ModelBar onError={setConfigError} />
+        </div>
+        <div className="toolbar-right">
+          <span className="input-hint">{state.busy ? "Esc 停止" : "Shift+Enter 换行"}</span>
+          {(state.busy || state.compacting) && <button className="stop-button round-button" aria-label={stopping ? "正在停止…" : "停止"} title="停止（Esc）" disabled={!ready || stopping} onClick={() => void abort()}><Square size={11} /></button>}
+          <button className="send-button round-button" aria-label={sending ? "发送中…" : state.busy ? "插话" : "发送"} title={state.busy ? "插话（Enter）" : "发送（Enter）"} disabled={!canSend} onClick={() => void submit()}><ArrowUp size={16} strokeWidth={2.4} /></button>
+        </div>
+      </div>
     </div>
     <WidgetPanels placement="belowEditor" />
-    <p className={`safety-hint ${modeFromStatus(ui.current.statuses["desk" + "-permissions"]) === "full" ? "danger-link" : ""}`}>{modeFromStatus(ui.current.statuses["desk" + "-permissions"]) === "full" ? "完全放开：工具不再审批。" : modeFromStatus(ui.current.statuses["desk" + "-permissions"]) ? "顶部可切换权限；审批不是系统沙箱。" : "权限插件尚未加载；工具没有审批保护。"} 附件移除不会删除已上传文件。</p>
+    {permission === "full" && <p className="safety-hint"><ShieldOff size={12} aria-hidden />完全放开：工具不再审批，请只在可信项目里使用</p>}
+    <footer className="statusbar">
+      <span data-testid="session-cost" title="按公开价估算，不是实际账单">${(state.stats.cost ?? 0).toFixed(state.stats.cost && state.stats.cost >= 1 ? 2 : 4)}</span>
+      <span data-testid="context-usage" title="每次要发给模型的上下文大小">{usage ? `ctx ${usage.tokens === null ? "待更新" : shortNumber(usage.tokens)} / ${shortNumber(usage.contextWindow)} (${usage.percent === null ? "—" : `${usage.percent.toFixed(1)}%`})` : "ctx —"}</span>
+      {statuses.length > 0 && <span className="plugin-statuses" title={statuses.map(([, value]) => value).join(" · ")}>{statuses.map(([key, value]) => <span key={key}>{value}</span>)}</span>}
+    </footer>
   </section>;
 }

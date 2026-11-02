@@ -1,3 +1,4 @@
+import { Brain, Check, ChevronRight, Circle, ClipboardList, FilePen, FilePlus2, FileText, Globe, ListChecks, MessageCircleQuestion, Terminal, Wrench, X, type LucideIcon } from "lucide-react";
 import type { Tool, WireRecord } from "../../api/types";
 import { useChat } from "../../api/ChatProvider";
 import { useFiles } from "../../api/FileProvider";
@@ -22,13 +23,18 @@ function summary(tool: Tool) {
   if (tool.name === "fetch_content") return args.url ?? args.urls?.join("；") ?? "获取网页";
   return pretty(args);
 }
+const TOOL_ICONS: Record<string, LucideIcon> = { bash: Terminal, read: FileText, edit: FilePen, write: FilePlus2, web_search: Globe, fetch_content: Globe, todo: ListChecks, ask_user_question: MessageCircleQuestion, plan_mode_complete: ClipboardList };
+const TOOL_NAMES: Record<string, string> = { bash: "执行命令", read: "读取", edit: "修改", write: "写入", web_search: "搜索网页", fetch_content: "读取网页", todo: "任务清单", ask_user_question: "提问", plan_mode_complete: "提交计划" };
 export function ToolCard({ tool }: { tool: Tool }) {
   const { state } = useChat(); const { openFile } = useFiles();
   const path = ["read", "edit", "write"].includes(tool.name) && typeof tool.args.path === "string" ? tool.args.path : undefined;
   const labels = { pending: "待执行", running: "执行中", done: "完成", error: "失败" };
   const plan = tool.name === "plan_mode_complete" ? tool.args.plan ?? tool.result?.details?.plan : undefined;
-  return <>{typeof plan === "string" && <section className="plan-card" data-testid="plan-card"><h3>实施计划</h3><Markdown text={plan} /></section>}<details className={`tool-card ${tool.status === "error" ? "tool-error" : ""}`} data-tool={tool.name}>
-    <summary><span className={`tool-dot ${tool.status}`} /><strong>{tool.name}</strong>{path ? <button className="tool-summary tool-path" title="点击在右侧预览文件" aria-label={`预览工具文件 ${path}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void openFile(state.cwd, path); }}>{path}</button> : <span className="tool-summary">{String(summary(tool)).slice(0, 240)}</span>}<span className="tool-state">{labels[tool.status]}</span></summary>
+  const Icon = TOOL_ICONS[tool.name] ?? (tool.name.startsWith("ctx_") ? Brain : Wrench);
+  return <>{typeof plan === "string" && <section className="plan-card" data-testid="plan-card"><h3><ClipboardList size={15} aria-hidden />实施计划</h3><Markdown text={plan} /></section>}<details className={`tool-card ${tool.status === "error" ? "tool-error" : ""}`} data-tool={tool.name}>
+    <summary><Icon size={14} className="tool-icon" aria-hidden /><span className="tool-name" title={tool.name}>{TOOL_NAMES[tool.name] ?? tool.name}</span>{path ? <button className="tool-summary tool-path" title="点击在右侧预览文件" aria-label={`预览工具文件 ${path}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void openFile(state.cwd, path); }}>{path}</button> : <span className="tool-summary">{String(summary(tool)).slice(0, 240)}</span>}
+      <span className="tool-status">{tool.status === "running" ? <span className="spinner" /> : tool.status === "done" ? <Check size={13} className="done" aria-hidden /> : tool.status === "error" ? <X size={13} className="error" aria-hidden /> : <Circle size={11} aria-hidden />}{tool.status === "error" ? labels.error : <span className="sr-only">{labels[tool.status]}</span>}</span>
+      <ChevronRight size={13} className="chevron" aria-hidden /></summary>
     <div className="tool-detail">
       <div className="detail-label">{tool.name === "bash" ? "命令" : "参数"}</div>
       <pre>{truncateOutput(tool.name === "bash" ? String(tool.args.command ?? "") : pretty(tool.args))}</pre>
