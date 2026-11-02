@@ -358,13 +358,15 @@ ls "$P"   # 重点看 rpc.md、rpc-commands.md、json.md、rpc-extension-ui.md�
 5. 写 `pi-extension/desk-permissions.ts`（§5），pi-pool 启动 pi 时用 `-e` 加载；顶部栏加权限切换。
 
 **验收**
-- [ ] 从 Finder 拖一张截图进来问"图里有什么"，AI 能描述图片内容。
-- [ ] 拖一个 PDF 进来问"总结一下"，AI 去读了 `.pi-desk/uploads/...` 并总结。
-- [ ] 从文件树拖 `src/App.tsx` 到输入框，问"这个文件做什么"，AI 读的是这个文件。
-- [ ] 输入"用 ask_user_question 问我用 Python 还是 Bash"，出现选择卡片，选了之后 AI 收到。
-- [ ] `/plan 写一个 hello.sh` 能走完：出计划 → 弹出菜单 → 选 Implement here → 文件被创建。
-- [ ] 让 AI 做一个 3 步的任务，清单面板显示并逐个打勾。
-- [ ] 三档权限都按 §5 的表工作（逐条测）。
+- [x] 从 Finder 拖一张截图进来问"图里有什么"，AI 能描述图片内容。
+- [x] 拖一个 PDF 进来问"总结一下"，AI 去读了 `.pi-desk/uploads/...` 并总结。
+- [x] 从文件树拖 `src/App.tsx` 到输入框，问"这个文件做什么"，AI 读的是这个文件。
+- [x] 输入"用 ask_user_question 问我用 Python 还是 Bash"，出现选择卡片，选了之后 AI 收到。
+- [x] `/plan 写一个 hello.sh` 能走完：出计划 → 弹出菜单 → 选 Implement here → 文件被创建。
+- [x] 让 AI 做一个 3 步的任务，清单面板显示并逐个打勾。
+- [x] 三档权限都按 §5 的表工作（逐条测）。
+
+实际验收记录及复跑方式见 [`docs/phase-5-verification.md`](docs/phase-5-verification.md)。最后完整一轮的每条付费回复均核对为 `cliproxy/gpt-6-luna` / `low`；权限矩阵使用真实 pi 工具流水线，危险执行器仅为测试替身，不执行破坏操作。
 
 ### 第 6 阶段：Electron 桌面应用 + Windows 远程
 

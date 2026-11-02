@@ -29,6 +29,8 @@ process.stdin.on("data", (chunk) => {
       case "get_session_stats": respond(cmd, { cost: 0, tokens: { total: 0 } }); break;
       case "get_available_models": respond(cmd, { models: [{ id: "test", provider: "test", baseUrl: "private-model-endpoint", secret: "not-public" }] }); break;
       case "get_commands": respond(cmd, { commands: [{ name: "test-command" }] }); break;
+      case "ui_request": emit({ type: "extension_ui_request", ...cmd.request }); respond(cmd, {}); break;
+      case "ui_batch": for (const request of cmd.requests) emit({ type: "extension_ui_request", ...request }); respond(cmd, {}); break;
       case "extension_ui_response": emit({ type: "ui_received", payload: cmd }); break;
       case "event": respond(cmd, {}); emit({ type: "test_event", text: "汉字\u2028段落\u2029结束" }); break;
       case "fragment": {

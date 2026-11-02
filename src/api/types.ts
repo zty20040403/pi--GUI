@@ -1,3 +1,4 @@
+import type { ExtensionSessionState, UiSnapshot } from "../../shared/extensions";
 // 使用本机 pi 1.4 的 RPC 记录；未知扩展字段保留，但不依赖整个 pi 包。
 export type WireRecord = Record<string, any>;
 export type Model = {
@@ -13,7 +14,7 @@ export type Message = {
   role: string; timestamp: number; content?: string | Block[]; stopReason?: string;
   toolCallId?: string; toolName?: string; isError?: boolean; display?: boolean;
   errorMessage?: string; model?: string; provider?: string; thinkingLevel?: string;
-  command?: string; output?: string; summary?: string;
+  command?: string; output?: string; summary?: string; details?: WireRecord;
 };
 export type ChatMessage = Message & { key: string; thinkingStarted?: number; thinkingMs?: number };
 export type Tool = {
@@ -30,7 +31,7 @@ export type Stats = {
 };
 export type Command = { name: string; description?: string; source?: string };
 export type Opened = {
-  op: "opened"; cwd: string; state: SessionState; messages: Message[]; stats: Stats; models: Model[]; commands: Command[]; seq?: number;
+  op: "opened"; cwd: string; state: SessionState; messages: Message[]; stats: Stats; models: Model[]; commands: Command[]; seq?: number; ui?: UiSnapshot; extensions?: ExtensionSessionState;
 };
 export type SessionSummary = { path: string; id: string; cwd: string; title: string; name?: string; mtime: number; virtual?: boolean };
 export type Project = { cwd: string; sessions: SessionSummary[] };

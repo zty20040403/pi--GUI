@@ -1,3 +1,4 @@
+import { todoSnapshot, type TodoSnapshot } from "../../shared/extensions";
 import type { Block, ChatMessage, Connection, Message, Model, Opened, SessionState, Stats, Tool, WireRecord, Command } from "./types";
 
 export type ChatState = {
@@ -5,15 +6,16 @@ export type ChatState = {
   activeKey?: string; session: SessionState; stats: Stats; models: Model[]; levels: string[]; commands: Command[];
   busy: boolean; compacting: boolean; waitingSince?: number; retry?: { attempt: number; maxAttempts: number };
   error?: string; notice?: string; statuses: Record<string, string>; steering: string[]; followUp: string[];
+  todo?: TodoSnapshot; todoSeq: number; focusedGoalId?: string | null;
 };
 export const initialState: ChatState = {
   cwd: "", connection: "connecting", messages: [], tools: {}, session: {}, stats: {}, models: [], levels: [], commands: [],
-  busy: false, compacting: false, statuses: {}, steering: [], followUp: [],
+  busy: false, compacting: false, statuses: {}, steering: [], followUp: [], todoSeq: 0,
 };
 export type Action =
   | { type: "connection"; value: Connection }
   | { type: "opened"; value: Opened }
-  | { type: "event"; value: WireRecord; now: number }
+  | { type: "event"; value: WireRecord; now: number; seq?: number }
   | { type: "session"; value: SessionState }
   | { type: "stats"; value: Stats }
   | { type: "levels"; value: string[] }
@@ -62,10 +64,14 @@ export function reducer(state: ChatState, action: Action): ChatState {
       const value = action.value;
       let next: ChatState = { ...initialState, cwd: value.cwd, connection: "ready", session: value.state,
         models: value.models, commands: value.commands, stats: value.stats, busy: !!value.state.isStreaming,
-        compacting: !!value.state.isCompacting, statuses: state.cwd === value.cwd ? state.statuses : {},
+        compacting: !!value.state.isCompacting, statuses: value.ui?.statuses ?? (state.cwd === value.cwd ? state.statuses : {}),
         waitingSince: value.state.isStreaming ? Date.now() : undefined };
-      for (const message of value.messages) next = putMessage(next, message, message.stopReason !== "pending", message.timestamp);
-      return next;
+      let history: TodoSnapshot | undefined;
+      for (const message of value.messages) {
+        next = putMessage(next, message, message.stopReason !== "pending", message.timestamp);
+        if (message.role === "toolResult" && message.toolName === "todo") history = todoSnapshot(message.details) ?? history;
+      }
+      return { ...next, todo: value.extensions?.todo ?? history, todoSeq: value.extensions?.seq ?? value.seq ?? 0, focusedGoalId: value.extensions?.focusedGoalId };
     }
     case "event": break;
   }
@@ -114,7 +120,8 @@ export function reducer(state: ChatState, action: Action): ChatState {
       const tool: Tool = { ...old, id: event.toolCallId, name: event.toolName, args: event.args ?? old?.args ?? {},
         status: event.type === "tool_execution_end" ? event.isError ? "error" : "done" : "running",
         result: event.result ?? event.partialResult ?? old?.result, durationMs: event.durationMs ?? old?.durationMs };
-      return { ...state, tools: { ...state.tools, [tool.id]: tool }, waitingSince: undefined };
+      const todo = event.type === "tool_execution_end" && tool.name === "todo" && (action.seq === undefined || action.seq > state.todoSeq) ? todoSnapshot(tool.result?.details) : undefined;
+      return { ...state, tools: { ...state.tools, [tool.id]: tool }, waitingSince: undefined, ...(todo ? { todo, todoSeq: action.seq ?? state.todoSeq } : {}) };
     }
     case "queue_update": return { ...state, steering: event.steering ?? [], followUp: event.followUp ?? [] };
     case "session_info_changed": return { ...state, session: { ...state.session, sessionName: event.name } };
@@ -130,7 +137,7 @@ export function reducer(state: ChatState, action: Action): ChatState {
         if (event.statusText === undefined) delete statuses[event.statusKey]; else statuses[event.statusKey] = event.statusText;
         return { ...state, statuses };
       }
-      if (event.method === "notify") return { ...state, notice: event.message };
+      // notify 由 ExtensionUiProvider 负责短暂提示，不在输入框里永久保留。
       return state;
     default: return state;
   }

@@ -16,6 +16,9 @@ import { HttpError, readJson } from "./http.js";
 import { logText, publicData } from "./privacy.js";
 import { FileService, serveFile } from "./files.js";
 import { OfficePreview } from "./office.js";
+import { UploadService } from "./uploads.js";
+import { extensionState } from "./extension-state.js";
+import { projectGoals } from "./goals.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MIME: Record<string, string> = {
@@ -46,6 +49,7 @@ export function createDeskServer(options: ServerOptions = {}) {
   const sessionsDir = options.sessionsDir ?? SESSIONS_DIR;
   const trash = options.trash ?? (async (path: string) => { await promisify(execFile)("trash", [path]); });
   const files = new FileService();
+  const uploads = new UploadService(files, trash);
   const office = new OfficePreview();
   const systemOpen = options.systemOpen ?? (async (path: string, reveal: boolean) => {
     try { await promisify(execFile)("open", [...(reveal ? ["-R"] : []), path], { timeout: 10000 }); }
@@ -93,6 +97,7 @@ export function createDeskServer(options: ServerOptions = {}) {
     const url = new URL(req.url ?? "/", BASE_URL);
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       if (!auth.checkHttp(req)) return json(res, 401, { error: "未授权" });
+      if (req.method === "POST" && url.pathname === "/api/upload") return json(res, 200, await uploads.upload(req, url.searchParams.get("cwd"), url.searchParams.get("name")));
       if (req.method === "POST" && ["/api/open", "/api/reveal"].includes(url.pathname)) {
         const body = await readJson(req);
         const file = await files.checked(body.cwd, body.path);
@@ -103,6 +108,7 @@ export function createDeskServer(options: ServerOptions = {}) {
         const file = await files.checked(url.searchParams.get("cwd"), url.searchParams.get("path"));
         return serveFile(req, res, file);
       }
+      if (req.method === "GET" && url.pathname === "/api/goals") return json(res, 200, { goals: await projectGoals(files, url.searchParams.get("cwd")) });
       if (req.method === "GET" && url.pathname === "/api/tree") return json(res, 200, await files.tree(url.searchParams.get("cwd"), url.searchParams.get("dir") ?? "."));
       if (req.method === "GET" && url.pathname === "/api/file-info") return json(res, 200, await files.info(url.searchParams.get("cwd"), url.searchParams.get("path")));
       if (["GET", "HEAD"].includes(req.method ?? "") && url.pathname === "/api/office") {
@@ -128,7 +134,7 @@ export function createDeskServer(options: ServerOptions = {}) {
         } finally { deleting.delete(session.path); }
       }
       if (req.method !== "GET") return json(res, 405, { error: "不支持这个方法" });
-      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 4, processes: pool.size });
+      if (url.pathname === "/api/health") return json(res, 200, { ok: true, phase: 5, processes: pool.size });
       if (url.pathname === "/api/projects") return json(res, 200, { projects: await listProjects(sessionsDir), activity: pool.activity });
       if (url.pathname === "/api/workspace") return json(res, 200, { cwd: ROOT, home: homedir() });
       return json(res, 404, { error: "接口不存在" });
@@ -164,6 +170,8 @@ export function createDeskServer(options: ServerOptions = {}) {
   }
   const diagnostics = new Map<string, string>();
   pool.on("record", (cwd: string, record: RpcRecord, seq: number, sessionPath?: string) => broadcast({ op: "event", cwd, record, seq, sessionPath }));
+  pool.on("ui_resolved", (cwd: string, id: string, reason: string) => broadcast({ op: "ui_resolved", cwd, id, reason }));
+  pool.on("ui_state", (cwd: string, state) => broadcast({ op: "ui_state", cwd, state }));
   pool.on("exit", (cwd: string, reason: string) => {
     const tail = diagnostics.get(cwd);
     if (tail) process.stderr.write(`[pi] ${logText(tail)}\n`);
@@ -187,13 +195,16 @@ export function createDeskServer(options: ServerOptions = {}) {
     if (message.op !== "open" && message.op !== "rpc" && message.op !== "ui_response") throw new Error("未知操作");
     if (message.op === "open" && message.sessionPath !== undefined && typeof message.sessionPath !== "string") throw new Error("sessionPath 必须是字符串");
     if (message.op === "rpc" && (typeof message.reqId !== "string" || !isObject(message.cmd) || typeof message.cmd.type !== "string")) throw new Error("rpc 需要 reqId 和 cmd.type");
-    if (message.op === "ui_response" && (!isObject(message.payload) || message.payload.type !== "extension_ui_response" || typeof message.payload.id !== "string")) throw new Error("弹窗回答格式不正确");
+    if (message.op === "ui_response" && (!isObject(message.payload) || message.payload.type !== "extension_ui_response" || typeof message.payload.id !== "string" || message.reqId !== undefined && typeof message.reqId !== "string")) throw new Error("弹窗回答格式不正确");
     if (message.op === "rpc" && (message.cmd as ObjectRecord).type === "extension_ui_response") throw new Error("弹窗回答请使用 ui_response");
     const pi = await pool.get(message.cwd);
     const cwd = pi.cwd;
     if (message.op === "ui_response") {
       // 不能排在 open 后面：open 自身可能正等插件弹窗的回答。
-      await pi.send(message.payload as ObjectRecord);
+      const response = pi.ui.claim(message.payload as ObjectRecord);
+      await pi.send(response);
+      broadcast({ op: "ui_resolved", cwd, id: response.id, reason: "answered" });
+      if (message.reqId) send(ws, { op: "rpc_result", reqId: message.reqId, response: { success: true, data: {} } });
       return;
     }
     if (message.op === "rpc") {
@@ -204,7 +215,14 @@ export function createDeskServer(options: ServerOptions = {}) {
         cmd.sessionPath = await checkSessionPath(cwd, cmd.sessionPath, sessionsDir);
         if (deleting.has(cmd.sessionPath as string)) throw new HttpError(409, "对话正在移到废纸篓");
       }
-      const response = await pi.request(cmd);
+      if (cmd.type === "abort") {
+        // 有些插件不传 AbortSignal：显式取消其等待项，避免停止卡在弹窗里。
+        for (const request of pi.uiSnapshot.dialogs) {
+          const payload = pi.ui.claim({ id: request.id, cancelled: true }); await pi.send(payload);
+          broadcast({ op: "ui_resolved", cwd, id: request.id, reason: "abort" });
+        }
+      }
+      const response = await pi.request(await uploads.prompt(cwd, cmd));
       send(ws, { op: "rpc_result", reqId: message.reqId, response });
       return;
     }
@@ -212,7 +230,7 @@ export function createDeskServer(options: ServerOptions = {}) {
     const operation = (opening.get(cwd) ?? Promise.resolve()).catch(() => {}).then(async () => {
       const current = dataOf(await pi.request({ type: "get_state" }));
       // 刷新/重连同一活动对话时不 switch；同一项目仍在回复时不许切走。
-      if (typeof message.sessionPath !== "string" || current.sessionFile !== message.sessionPath) {
+      if ((typeof message.sessionPath !== "string" || current.sessionFile !== message.sessionPath) && !(message.sessionPath === undefined && pi.ui.pendingCount)) {
         if (current.isStreaming || current.isCompacting) throw new HttpError(409, "这个项目的对话还在回复，请先停止或等待完成");
         const cmd = typeof message.sessionPath === "string"
           ? { type: "switch_session", sessionPath: await checkSessionPath(cwd, message.sessionPath, sessionsDir) }
@@ -223,17 +241,20 @@ export function createDeskServer(options: ServerOptions = {}) {
       const state = dataOf(await pi.request({ type: "get_state" }));
       const messageResponse = await pi.request({ type: "get_messages" });
       const messages = dataOf(messageResponse).messages;
+      const entriesResponse = await pi.request({ type: "get_entries" }); const entries = dataOf(entriesResponse);
+      const extensions = { ...extensionState(entries.entries, entries.leafId), seq: sequenceOf(entriesResponse) };
       const stats = dataOf(await pi.request({ type: "get_session_stats" }));
       const models = dataOf(await pi.request({ type: "get_available_models" })).models;
       const commands = dataOf(await pi.request({ type: "get_commands" })).commands;
       files.register(cwd);
-      send(ws, { op: "opened", cwd, state, messages, stats, models, commands, seq: sequenceOf(messageResponse) });
+      send(ws, { op: "opened", cwd, state, messages, stats, models, commands, extensions, ui: pi.uiSnapshot, seq: sequenceOf(messageResponse) });
     });
     opening.set(cwd, operation);
     try { await operation; } finally { if (opening.get(cwd) === operation) opening.delete(cwd); }
   }
 
   wsServer.on("connection", (ws) => {
+    send(ws, { op: "ui_states", states: pool.uiSnapshots });
     ws.on("error", () => ws.terminate());
     ws.on("message", (raw, isBinary) => {
       let message: ObjectRecord;

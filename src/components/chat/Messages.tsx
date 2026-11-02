@@ -3,6 +3,7 @@ import { blocksOf } from "../../api/state";
 import { useChat } from "../../api/ChatProvider";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
+import { MessageImage } from "./MessageImage";
 
 export function Messages() {
   const { state } = useChat();
@@ -25,7 +26,7 @@ export function Messages() {
     stick.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
     setJump(!stick.current);
   }}><div className="messages-inner">
-    {!state.messages.some((message) => message.role === "user") && <section className="welcome"><div className="welcome-mark">π</div><h1>今天想做点什么？</h1><p>直接开始聊，pi 会在当前项目里帮你读文件、写代码和执行命令。</p><p className="muted">左侧管理对话，右侧只读预览文件；附件和操作审批将在第 5 阶段提供。</p></section>}
+    {!state.messages.some((message) => message.role === "user") && <section className="welcome"><div className="welcome-mark">π</div><h1>今天想做点什么？</h1><p>直接开始聊，pi 会在当前项目里帮你读文件、写代码和执行命令。</p><p className="muted">左侧管理对话，右侧预览文件；可以拖入截图、PDF，也可以从文件树拖入文件路径。</p></section>}
     {state.messages.map((message) => {
       if (message.role === "system" || message.role === "toolResult" || message.role === "custom" && !message.display) return null;
       const blocks = blocksOf(message);
@@ -35,7 +36,7 @@ export function Messages() {
           if (block.type === "text") return message.role === "user" ? <div key={index} className="user-text">{block.text}</div> : <Markdown key={index} text={block.text ?? ""} />;
           if (block.type === "thinking") return <details key={index} className="thinking"><summary>{message.thinkingMs !== undefined ? `思考了 ${(message.thinkingMs / 1000).toFixed(1)} 秒` : message.stopReason === "pending" ? "正在思考…" : "思考过程"}</summary><pre>{block.redacted ? "此模型隐藏了思考内容" : block.thinking || "（无可显示的思考内容）"}</pre></details>;
           if (block.type === "toolCall" && block.id && state.tools[block.id]) return <ToolCard key={block.id} tool={state.tools[block.id]} />;
-          if (block.type === "image") return <p key={index} className="muted">[图片附件：图片显示将在第 5 阶段提供]</p>;
+          if (block.type === "image") return <MessageImage key={index} data={block.data} mime={block.mimeType} />;
           return null;
         })}
         {message.role === "bashExecution" && <pre>{message.command}{"\n"}{message.output}</pre>}

@@ -61,6 +61,7 @@ async function mockBrowserTests(browser: Browser) {
   const result = (reqId: string, data: any) => route.send(JSON.stringify({ op: "rpc_result", reqId, response: { success: true, data } }));
   await page.route("**/api/workspace", (route) => route.fulfill({ json: { cwd: "/fixture" } }));
   await page.route("**/api/projects", (route) => route.fulfill({ json: { projects: [], activity: [] } }));
+  await page.route("**/api/goals**", (route) => route.fulfill({ json: { goals: [] } }));
   await page.route("**/api/tree**", (route) => route.fulfill({ json: { cwd: "/fixture", dir: "/fixture", entries: [], truncated: false } }));
   await page.routeWebSocket(/\/ws\?/, (ws) => {
     route = ws;
@@ -69,6 +70,7 @@ async function mockBrowserTests(browser: Browser) {
       if (message.op === "open") { emit({ type: "extension_ui_request", id: "open-dialog", method: "confirm", title: "fixture confirm" }); return; }
       if (message.op === "ui_response" && message.payload.id === "open-dialog") {
         assert.equal(message.payload.cancelled, true);
+        result(message.reqId, {}); ws.send(JSON.stringify({ op: "ui_resolved", cwd: "/fixture", id: "open-dialog", reason: "answered" }));
         ws.send(JSON.stringify({ op: "opened", cwd: "/fixture", state: state(), messages, stats: { cost: 0.012, contextUsage: { tokens: 9200, contextWindow: 1050000, percent: 0.9 } }, models: [luna], commands: [{ name: "plan", description: "计划模式" }], seq: sequence })); return;
       }
       if (message.op !== "rpc") return;
@@ -90,7 +92,8 @@ async function mockBrowserTests(browser: Browser) {
     });
   });
   try {
-    await page.goto("http://127.0.0.1:5173/?token=fixture"); await idle(page);
+    await page.goto("http://127.0.0.1:5173/?token=fixture");
+    await expect(page.getByRole("dialog")).toContainText("fixture confirm"); await page.getByRole("dialog").getByRole("button", { name: "取消", exact: true }).click(); await idle(page);
     assert.ok(sent.some((message) => message.op === "ui_response" && message.payload.id === "open-dialog"), "打开时需要弹窗的插件不能卡死界面");
     await expect(page.getByTestId("context-usage")).toHaveText("ctx 9.2K / 1.05M (0.9%)");
     await page.getByLabel("消息", { exact: true }).fill("第一行"); await page.getByLabel("消息", { exact: true }).press("Shift+Enter");

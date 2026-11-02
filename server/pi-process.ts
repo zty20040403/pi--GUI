@@ -1,5 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { ExtensionUi } from "./extension-ui.js";
+import { delimiter } from "node:path";
 
 // 一个项目文件夹对应一个后台 pi（RPC 模式），协议见 pi 文档 docs/rpc.md。
 export type RpcRecord = { type: string; id?: string; [key: string]: unknown };
@@ -7,8 +9,14 @@ export const RPC_SEQUENCE = Symbol("desk sequence");
 export const sequenceOf = (record: RpcRecord): number => (record as RpcRecord & { [RPC_SEQUENCE]?: number })[RPC_SEQUENCE] ?? 0;
 export type PiProcessOptions = { binary?: string; args?: string[]; requestTimeoutMs?: number };
 type Pending = { resolve: (record: RpcRecord) => void; reject: (error: Error) => void; timer: NodeJS.Timeout };
+// npm/tsx 会把开发 SDK 的同名 pi 放到 PATH 最前面；发动机必须仍用用户安装的 pi。
+export function piEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return { ...env, ...(env.PATH ? { PATH: env.PATH.split(delimiter).filter((path) => !/(?:^|[\\/])node_modules[\\/]\.bin[\\/]?$/.test(path)).join(delimiter) } : {}) };
+}
 
 export class PiProcess extends EventEmitter {
+  readonly ui = new ExtensionUi((id, reason) => this.emit("ui_resolved", id, reason));
+  get uiSnapshot() { return this.ui.snapshot(this.sequence); }
   private readonly child: ChildProcessWithoutNullStreams;
   private readonly closed: Promise<void>;
   private readonly requestTimeoutMs: number;
@@ -26,7 +34,7 @@ export class PiProcess extends EventEmitter {
     this.requestTimeoutMs = options.requestTimeoutMs ?? 120_000;
     this.child = spawn(options.binary ?? process.env.PI_BIN ?? "pi", [...(options.args ?? []), "--mode", "rpc"], {
       cwd,
-      env: process.env,
+      env: piEnvironment(),
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.closed = new Promise((resolve) => this.child.once("close", () => resolve()));
@@ -52,6 +60,7 @@ export class PiProcess extends EventEmitter {
       reject(error);
     }
     this.pending.clear();
+    this.ui.dispose();
     this.emit("exit", error.message);
   }
 
@@ -78,6 +87,7 @@ export class PiProcess extends EventEmitter {
         if (record.command === "get_state") this.sessionFile = typeof data?.sessionFile === "string" ? data.sessionFile : undefined;
         if (["new_session", "switch_session"].includes(String(record.command)) && data?.cancelled !== true) this.sessionFile = undefined;
       }
+      this.ui.record(record);
       this.emit("activity");
       const waiter = record.type === "response" && record.id ? this.pending.get(record.id) : undefined;
       if (waiter) {
@@ -92,13 +102,21 @@ export class PiProcess extends EventEmitter {
 
   request(command: Record<string, unknown>): Promise<RpcRecord> {
     if (this.exited || this.disposal) return Promise.reject(new Error("pi is not running"));
+    const changing = ["new_session", "switch_session"].includes(String(command.type));
+    if (changing && this.ui.pendingCount) return Promise.reject(new Error("插件正在等你回答，请先处理弹窗"));
+    const previous = changing ? this.uiSnapshot : undefined;
+    if (changing) { this.ui.reset(); this.emit("ui_state", this.uiSnapshot); }
+    if (command.type === "prompt") this.ui.clearEditor();
     const id = `desk-${this.nextId++}`;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`pi command timed out: ${String(command.type)}`));
       }, this.requestTimeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve: (response) => {
+        if (previous && (response.success !== true || (response.data as Record<string, unknown> | undefined)?.cancelled === true)) { this.ui.restore(previous); this.emit("ui_state", this.uiSnapshot); }
+        resolve(response);
+      }, reject, timer });
       void this.send({ ...command, id }).catch((error: Error) => {
         const waiter = this.pending.get(id);
         if (!waiter) return;

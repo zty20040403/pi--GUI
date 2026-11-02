@@ -12,7 +12,7 @@ import { WebSocket } from "ws";
 import { BASE_URL, DeskAuth } from "../server/auth.js";
 import { createDeskServer } from "../server/index.js";
 import { PiPool } from "../server/pi-pool.js";
-import { PiProcess } from "../server/pi-process.js";
+import { PiProcess, piEnvironment } from "../server/pi-process.js";
 import { logText, publicData } from "../server/privacy.js";
 import { checkSessionPath, listProjects } from "../server/sessions.js";
 import { DeskClient } from "./ws-client.js";
@@ -25,6 +25,11 @@ const makePi = (cwd: string, args: string[] = []) => new PiProcess(cwd, { binary
 function request(headers: IncomingMessage["headers"], url = "/ws"): IncomingMessage { return { headers, url } as IncomingMessage; }
 
 // 不并发占用固定端口，也不调用模型。真实模型另由 smoke 验收。
+test("pi 子进程用用户 PATH，不让 npm 开发 SDK 的同名 pi 替换用户配置的启动器", () => {
+  const env = piEnvironment({ PATH: "/project/node_modules/.bin:/cache/npm/node_modules/.bin/:/Users/fixture/.local/bin:/usr/bin", NORMAL_SETTING: "fixture" });
+  assert.equal(env.PATH, "/Users/fixture/.local/bin:/usr/bin"); assert.equal(env.NORMAL_SETTING, "fixture");
+});
+
 test("随机口令、HTTP Host/Bearer 和 WS Host/Origin/query 校验", () => {
   const auth = new DeskAuth(true);
   assert.match(auth.token, /^[a-f0-9]{64}$/);
@@ -218,6 +223,7 @@ test("真实 HTTP/WS 转发、广播、UI 回答、非法请求和生产静态�
       const event = await client.waitFor((message) => message.op === "event" && message.record.type === "test_event");
       assert.equal(event.record.text, "汉字\u2028段落\u2029结束");
     }
+    await a.rpc(root, { type: "ui_request", request: { id: "dialog-1", method: "select", title: "fixture", options: ["允许"] } });
     const payload = { type: "extension_ui_response", id: "dialog-1", value: "允许" };
     a.send({ op: "ui_response", cwd: root, payload });
     assert.deepEqual((await b.waitFor((message) => message.op === "event" && message.record.type === "ui_received")).record.payload, payload);

@@ -1,19 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { RpcClient } from "./client";
+import type { AttachmentRef } from "./attachments";
 import { initialState, reducer, type ChatState } from "./state";
 import { http, savedTarget, SESSION_KEY } from "./storage";
 import { readRecents, RECENTS_KEY, rememberProject } from "./projects";
 import type { Activity, Project, RecentProject, SessionState, SessionSummary, Stats, Target, WireRecord } from "./types";
 
-export type RecordEvent = { cwd: string; record: WireRecord; sessionPath?: string };
+export type RecordEvent = { cwd: string; record: WireRecord; sessionPath?: string; seq?: number };
 type ContextValue = {
   subscribeRecords: (listener: (event: RecordEvent) => void) => () => void;
   state: ChatState; projects: Project[]; home: string; recents: RecentProject[]; running: Record<string, boolean>;
   projectsLoading: boolean; projectsError: string; switching: boolean; refreshProjects: () => Promise<void>;
-  send: (message: string, behavior?: "steer" | "followUp") => Promise<void>; stop: () => Promise<string[]>;
+  send: (message: string, behavior?: "steer" | "followUp", attachments?: AttachmentRef[]) => Promise<void>; stop: () => Promise<string[]>;
   changeModel: (provider: string, id: string) => Promise<void>; changeThinking: (level: string) => Promise<void>;
   open: (target: Target) => Promise<void>; openFolder: (path: string) => Promise<void>;
   renameSession: (session: SessionSummary, name: string) => Promise<void>; deleteSession: (session: SessionSummary) => Promise<void>;
+  answerUi: (cwd: string, payload: WireRecord) => Promise<void>;
   reconnect: () => void; clearError: () => void;
 };
 const Context = createContext<ContextValue | null>(null);
@@ -89,6 +91,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
         const prior = known[cwd]; known[cwd] = sessionPath;
         setRunning((rows) => { const next = { ...rows }; if (prior) delete next[prior]; if (sessionPath && event.value.state.isStreaming) next[sessionPath] = true; return next; });
         hasMessages = event.value.messages.some((message) => message.role === "user"); persist(); visit(cwd);
+        if (event.value.ui) for (const listener of recordListeners.current) listener({ cwd, record: { type: "desk_ui_state", state: event.value.ui } });
         dispatch({ type: "opened", value: event.value }); void refresh.current().catch(report); scheduleList();
       }
       if (event.kind === "deleted") {
@@ -103,19 +106,15 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
       }
       if (event.kind === "event") {
         const record = event.value;
-        for (const listener of recordListeners.current) listener({ cwd: event.cwd, record, sessionPath: event.sessionPath });
+        for (const listener of recordListeners.current) listener({ cwd: event.cwd, record, sessionPath: event.sessionPath, seq: event.seq });
         if (["agent_start", "agent_settled", "desk_process_exit"].includes(record.type)) {
           activityVersion++;
           const path = event.sessionPath ?? known[event.cwd];
           if (path) setRunning((rows) => { const next = { ...rows }; if (record.type === "agent_start") next[path] = true; else delete next[path]; return next; });
         }
         if (["agent_settled", "session_info_changed", "desk_process_exit"].includes(record.type)) scheduleList();
-        if (event.cwd === rpc.selectedCwd && record.type === "extension_ui_request" && ["select", "confirm", "input", "editor"].includes(record.method)) {
-          rpc.uiResponse(event.cwd, { type: "extension_ui_response", id: record.id, cancelled: true });
-          dispatch({ type: "notice", value: "这个插件需要交互弹窗，第 5 阶段才提供；本次已取消，请暂时在终端使用。" });
-        }
         if (event.cwd === cwd) {
-          dispatch({ type: "event", value: record, now: Date.now() });
+          dispatch({ type: "event", value: record, now: Date.now(), seq: event.seq });
           if (record.type === "message_end" && record.message?.role === "user") { hasMessages = true; persist(); scheduleList(); }
           if (record.type === "desk_process_exit") dispatch({ type: "session", value: { isStreaming: false, isCompacting: false } });
           if (["agent_settled", "thinking_level_changed", "session_info_changed"].includes(record.type)) void refresh.current().catch(report);
@@ -135,10 +134,10 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
     if (!client.current || current.current.connection !== "ready") throw new Error("请等待后台连接完成");
     return client.current.rpc(current.current.cwd, cmd);
   }
-  async function send(message: string, behavior?: "steer" | "followUp") {
+  async function send(message: string, behavior?: "steer" | "followUp", attachments: AttachmentRef[] = []) {
     dispatch({ type: "error", value: undefined }); const cwd = current.current.cwd;
-    if (message.trim() === "/compact") { await rpc({ type: "compact" }); await refresh.current(); return; }
-    const data = await rpc({ type: "prompt", message, ...(current.current.busy ? { streamingBehavior: behavior ?? "steer" } : {}) });
+    if (message.trim() === "/compact") { if (attachments.length) throw new Error("压缩上下文不需要附件，请先移除附件"); await rpc({ type: "compact" }); await refresh.current(); return; }
+    const data = await rpc({ type: "prompt", message, ...(attachments.length ? { attachments } : {}), ...(current.current.busy ? { streamingBehavior: behavior ?? "steer" } : {}) });
     if (current.current.cwd !== cwd) return;
     dispatch({ type: "accepted", disposition: data?.disposition, now: Date.now() });
     if (data?.disposition === "handled") await refresh.current();
@@ -170,5 +169,6 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
   }
   return <Context.Provider value={{ subscribeRecords, state, projects, home, recents, running, projectsLoading, projectsError, switching,
     refreshProjects: () => refreshProjects.current(), send, stop, changeModel, changeThinking, open, openFolder, renameSession, deleteSession,
+    answerUi: async (cwd, payload) => { if (!client.current) throw new Error("尚未连接后台"); await client.current.uiResponse(cwd, payload); },
     reconnect: () => client.current?.reconnect(), clearError: () => dispatch({ type: "error", value: undefined }) }}>{children}</Context.Provider>;
 }

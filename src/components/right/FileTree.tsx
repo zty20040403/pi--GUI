@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useChat } from "../../api/ChatProvider";
+import { PATH_DRAG_TYPE, shortPath } from "../../api/attachments";
 import { useFiles } from "../../api/FileProvider";
 import { fileTree, type TreeEntry, type TreeResult } from "../../api/files";
 function Directory({ cwd, dir, depth }: { cwd: string; dir: string; depth: number }) {
@@ -18,6 +19,7 @@ function Directory({ cwd, dir, depth }: { cwd: string; dir: string; depth: numbe
 function Entry({ cwd, entry, depth }: { cwd: string; entry: TreeEntry; depth: number }) {
   const { openFile, project } = useFiles(); const [expanded, setExpanded] = useState(false); const directory = entry.kind === "directory";
   return <li role="none"><button role="treeitem" aria-expanded={directory ? expanded : undefined} aria-label={directory ? `${expanded ? "收起" : "展开"}文件夹 ${entry.name}` : `预览 ${entry.name}`} className="file-node" data-path={entry.path} style={{ paddingLeft: 12 + depth * 14 }} title={entry.path}
+    draggable={!directory} onDragStart={(event) => { if (directory) return; event.dataTransfer.effectAllowed = "copy"; event.dataTransfer.setData(PATH_DRAG_TYPE, JSON.stringify({ cwd, path: entry.path, name: entry.name })); event.dataTransfer.setData("text/plain", `@${shortPath(cwd, entry.path)}`); }}
     onClick={() => directory ? setExpanded((value) => !value) : void openFile(cwd, entry.path)}><span className="file-node-icon">{directory ? expanded ? "⌄" : "›" : "·"}</span><span>{entry.name}</span>{entry.symlink && <small>↗</small>}{project.changed[entry.path] && <span className="file-changed-dot" data-testid="file-changed" title="AI 修改过这个文件" />}</button>
     {directory && expanded && (depth < 60 ? <Directory cwd={cwd} dir={entry.path} depth={depth + 1} /> : <p className="tree-empty">目录过深，请用 Finder 打开。</p>)}
   </li>;

@@ -1,7 +1,7 @@
 import type { Connection, Opened, Target, WireRecord } from "./types";
 
 type ClientEvent = { kind: "connection"; value: Connection } | { kind: "opened"; value: Opened }
-  | { kind: "event"; cwd: string; value: WireRecord; sessionPath?: string }
+  | { kind: "event"; cwd: string; value: WireRecord; sessionPath?: string; seq?: number }
   | { kind: "deleted"; cwd: string; sessionPath: string; selected: boolean } | { kind: "error"; value: string };
 type Pending = { resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 export class RpcClient {
@@ -62,11 +62,13 @@ export class RpcClient {
           if (record.message) active = `${record.message.role}:${record.message.timestamp}:${record.message.toolCallId ?? ""}`;
           // 快照之前、且已在历史中的消息不重放，避免把相同 delta 拼两遍。
           const pastMessage = record.type.startsWith("message_") && represented.has(active) && item.seq <= (message.seq ?? 0);
-          if (!pastMessage) this.emit({ kind: "event", cwd: item.cwd, value: record, sessionPath: item.sessionPath });
+          if (!pastMessage) this.emit({ kind: "event", cwd: item.cwd, value: record, sessionPath: item.sessionPath, seq: item.seq });
         }
         this.buffered = [];
         this.emit({ kind: "connection", value: "ready" });
         this.resolveOpen(message);
+      } else if (["ui_states", "ui_state", "ui_resolved"].includes(message.op)) {
+        this.emit({ kind: "event", cwd: message.cwd ?? "", value: { ...message, type: `desk_${message.op}` } });
       } else if (message.op === "rpc_result" || message.op === "error" && message.reqId) {
         const waiter = this.pending.get(message.reqId);
         if (!waiter) return;
@@ -77,7 +79,7 @@ export class RpcClient {
         const dialog = message.record?.type === "extension_ui_request" && ["select", "confirm", "input", "editor"].includes(message.record.method);
         // open 自身也可能等待插件提问；对话交互不能等 opened 后再交给界面。
         if (this.buffering && message.cwd === this.target?.cwd && !dialog) this.buffered.push({ cwd: message.cwd, record: message.record, seq: message.seq ?? 0, sessionPath: message.sessionPath });
-        else this.emit({ kind: "event", cwd: message.cwd, value: message.record, sessionPath: message.sessionPath });
+        else this.emit({ kind: "event", cwd: message.cwd, value: message.record, sessionPath: message.sessionPath, seq: message.seq });
       } else if (message.op === "session_deleted") {
         const selected = this.target?.sessionPath === message.sessionPath;
         if (selected) {
@@ -131,18 +133,19 @@ export class RpcClient {
     if (error) this.opening.reject(error); else this.opening.resolve(value);
     this.opening = undefined;
   }
-  rpc<T = any>(cwd: string, cmd: WireRecord): Promise<T> {
+  rpc<T = any>(cwd: string, cmd: WireRecord): Promise<T> { return this.command({ op: "rpc", cwd, cmd }); }
+  uiResponse(cwd: string, payload: WireRecord): Promise<void> { return this.command({ op: "ui_response", cwd, payload }); }
+  private command<T>(body: WireRecord): Promise<T> {
     const reqId = `web-${this.nextId++}`;
     return new Promise((resolve, reject) => {
       this.pending.set(reqId, { resolve, reject, timer: setTimeout(() => {
         this.pending.delete(reqId); reject(new Error("命令等待超时；请先检查对话状态，不要重复发送危险操作"));
       }, 120_000) });
-      try { this.send({ op: "rpc", cwd, reqId, cmd }); } catch (error) {
+      try { this.send({ ...body, reqId }); } catch (error) {
         const waiter = this.pending.get(reqId)!; clearTimeout(waiter.timer); this.pending.delete(reqId); reject(error);
       }
     });
   }
-  uiResponse(cwd: string, payload: WireRecord) { this.send({ op: "ui_response", cwd, payload }); }
   private send(value: WireRecord) {
     if (this.socket?.readyState !== 1) throw new Error("尚未连接后台");
     this.socket.send(JSON.stringify(value));

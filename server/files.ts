@@ -80,6 +80,10 @@ export class FileService {
   private sensitive(path: string) {
     return this.protected.some((root) => inside(root, path)) || path.split(sep).some((part) => part === ".env" || part.startsWith(".env.") || [".netrc", ".npmrc", ".pypirc", ".git-credentials"].includes(part));
   }
+  async refuseSensitive(path: string) {
+    await this.ready;
+    if (this.sensitive(resolve(path))) throw new HttpError(403, "不允许访问敏感路径");
+  }
   async resolvePath(cwd: unknown, requested: unknown, directory = false) {
     await this.ready;
     if (typeof requested !== "string" || !requested || requested.length > 4096 || requested.includes("\0")) throw new HttpError(400, "缺少有效文件路径");

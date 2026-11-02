@@ -39,6 +39,8 @@ export class PiPool extends EventEmitter {
     return [...this.processes.values()].map(({ pi, busy }) => ({ cwd: pi.cwd, sessionPath: pi.sessionFile, busy }));
   }
 
+  get uiSnapshots() { return [...this.processes.values()].map(({ pi }) => ({ cwd: pi.cwd, state: pi.uiSnapshot })); }
+
   async get(cwd: string): Promise<PiProcess> {
     if (!isAbsolute(cwd)) throw new Error("项目路径必须是绝对路径");
     const canonical = await realpath(cwd);
@@ -68,6 +70,8 @@ export class PiPool extends EventEmitter {
       if (record.type === "agent_settled") entry.busy = false;
       this.emit("record", canonical, record, sequenceOf(record), pi.sessionFile);
     });
+    pi.on("ui_resolved", (id: string, reason: string) => this.emit("ui_resolved", canonical, id, reason));
+    pi.on("ui_state", (state) => this.emit("ui_state", canonical, state));
     pi.on("stderr", (chunk: string) => this.emit("stderr", canonical, chunk));
     pi.once("exit", (reason: string) => {
       if (this.processes.get(canonical) === entry) this.processes.delete(canonical);
@@ -78,7 +82,7 @@ export class PiPool extends EventEmitter {
 
   private closeIdle() {
     for (const entry of this.processes.values()) {
-      if (!entry.busy && entry.pi.pendingCount === 0 && this.now() - entry.lastActivity >= this.idleTimeoutMs) {
+      if (!entry.busy && entry.pi.pendingCount === 0 && entry.pi.ui.pendingCount === 0 && this.now() - entry.lastActivity >= this.idleTimeoutMs) {
         void entry.pi.dispose().catch(() => this.emit("stderr", entry.pi.cwd, "无法关闭空闲 pi 进程\n"));
       }
     }
