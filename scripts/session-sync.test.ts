@@ -38,6 +38,23 @@ test("sessions 真实 recursive watch 防抖，新建/改名/移走广播；监�
   finally { fallback.close(); await exec("trash", [root]); }
 });
 
+test("项目存在性只轮询项目本身，移走/恢复及时广播，普通内容变化不触发刷新，移除及关闭释放监听", async () => {
+  const { root } = await fixture(); const project = join(root, "project"); const moved = join(root, "moved"); await mkdir(project);
+  const sync = new SessionSync(root, { debounceMs: 5, projectPollMs: 20 }); let events = 0;
+  sync.on("projects_changed", () => events++);
+  const until = async (predicate: () => boolean) => { for (let i = 0; i < 100 && !predicate(); i++) await pause(20); assert.ok(predicate()); };
+  try {
+    // 不启用 sessions watcher，确保下面的变化只由项目存在性轮询捕获。
+    sync.watchProjects([project, project]); await pause(80); assert.equal(events, 0);
+    await writeFile(join(project, "new.txt"), "fixture"); await pause(100); assert.equal(events, 0);
+    await rename(project, moved); await until(() => events === 1);
+    await rename(moved, project); await until(() => events === 2);
+    sync.watchProjects([]); await rename(project, moved); await pause(100); assert.equal(events, 2);
+    sync.watchProjects([project]); await pause(80); await rename(moved, project); await until(() => events === 3);
+    sync.close(); await rename(project, moved); await pause(100); assert.equal(events, 3);
+  } finally { sync.close(); await exec("trash", [root]); }
+});
+
 test("外部条目逐内容核对，不误报自己写入；外部追加/篡改即锁定，显式重新载入才清除", async () => {
   const { root, path } = await fixture(); const pi = memoryPi(root, path); const sync = new SessionSync(root); let changes = 0; sync.on("external_changed", () => changes++);
   try {

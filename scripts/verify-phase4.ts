@@ -49,7 +49,7 @@ async function main() {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await context.addInitScript(({ key, cwd }) => { if (window !== window.top) return; if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify({ cwd })); }, { key: SESSION_KEY, cwd: root });
     const page = await context.newPage(); const pageErrors: string[] = []; const requests: string[] = []; const wire: any[] = []; let dialogs = 0;
-    page.on("pageerror", (error) => pageErrors.push(error.message)); page.on("dialog", (dialog) => { dialogs++; void dialog.dismiss(); });
+    page.on("pageerror", (error) => { pageErrors.push(error.message); console.error(`页面错误：${logText(error.message)}`); }); page.on("dialog", (dialog) => { dialogs++; void dialog.dismiss(); });
     page.on("request", (request) => { const url = new URL(request.url()); if (url.pathname.startsWith("/api/")) requests.push(url.pathname + url.search); });
     page.on("websocket", (socket) => socket.on("framereceived", ({ payload }) => { try { const message = JSON.parse(payload.toString()); wire.push(message); if (message.op === "opened" && [root, other].includes(message.cwd)) sessions.add(message.state.sessionFile); } catch {} }));
     await page.goto(backend.url); await idle(page); await expect(panel(page).getByRole("treeitem", { name: "预览 sample.md", exact: true })).toBeVisible();
@@ -107,9 +107,21 @@ async function main() {
     assert.equal((await fetch(`${BASE_URL}/api/file?${new URLSearchParams({ cwd: root, path: join(other, "notes.md") })}`, { headers })).status, 403);
     assert.equal((await fetch(`${BASE_URL}/api/file?${new URLSearchParams({ cwd: root, path: "sample.md" })}`)).status, 401);
     console.log("验收 4/4 通过：真实文件接口拒绝 ~/.ssh/id_ed25519（403），越界 403，无口令 401");
-    await ask(page, '只输出三部分 Markdown，不要工具：一个 python 代码块 print("CHAT HIGHLIGHT OK")；一个 Mermaid 代码块 flowchart LR 换行 X-->Y；一个显示公式 $$a^2+b^2=c^2$$。');
-    await expect(page.locator("article[data-role=assistant]").last().locator(".syntax[data-highlighted=true]")).toBeVisible({ timeout: 180000 }); await idle(page);
-    await expect(page.locator("article[data-role=assistant]").last().getByAltText("Mermaid 图表")).toBeVisible({ timeout: 30000 }); await expect(page.locator("article[data-role=assistant]").last().locator(".katex")).toHaveCount(1);
+    await ask(page, String.raw`不要工具，不要把整段包在代码围栏里。输出一个 python 代码块 print("CHAT HIGHLIGHT OK")、一个 Mermaid 代码块 flowchart LR 换行 X-->Y，然后严格原样输出以下四个公式（保留指定分隔符）：
+行内一：\(E=mc^2\)。行内二：$x^2$。
+
+\[
+\frac{1}{2}+\frac{1}{2}=1
+\]
+
+$$
+a^2+b^2=c^2
+$$`);
+    await expect(page.locator("article[data-role=assistant]").last().locator(".code-block").filter({ hasText: "CHAT HIGHLIGHT OK" }).locator(".syntax[data-highlighted=true]")).toBeVisible({ timeout: 180000 }); await idle(page);
+    await expect(page.locator("article[data-role=assistant]").last().getByAltText("Mermaid 图表")).toBeVisible({ timeout: 30000 }); await expect(page.locator("article[data-role=assistant]").last().locator(".katex")).toHaveCount(4);
+    const final = wire.filter((item) => item.record?.type === "message_end" && item.record.message?.role === "assistant").at(-1)?.record.message;
+    const mathText = final?.content?.filter((block: any) => block.type === "text").map((block: any) => block.text).join("") ?? "";
+    assert.ok(mathText.includes(String.raw`\(`) && mathText.includes(String.raw`\[`), "真实回复必须使用反斜杠分隔符，不能只验美元公式");
     await page.getByLabel("搜索对话").fill(root.split("/").at(-1)!); await page.screenshot({ path: join(artifacts, "phase-4-light.png") }); await page.emulateMedia({ colorScheme: "dark" }); await page.screenshot({ path: join(artifacts, "phase-4-dark.png") });
     await page.reload(); await idle(page); await expect(preview(page)).toContainText(marker); assert.deepEqual(pageErrors, []);
     const cost = await page.getByTestId("session-cost").innerText(); console.log(`真实聊天 ${cost}；聊天高亮/Mermaid/公式及刷新后文件标签恢复通过`);

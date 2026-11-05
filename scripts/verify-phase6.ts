@@ -27,18 +27,34 @@ async function quitApp(browser: Awaited<ReturnType<typeof chromium.connectOverCD
   if (!browser.isConnected()) return;
   const control = await browser.newBrowserCDPSession();
   // 应用退出时不会可靠返回 Browser.close 的应答；以真实连接断开为准，再检查后台端口。
-  await new Promise<void>((done, reject) => {
-    const timeout = setTimeout(() => reject(new Error("App 未在 15 秒内真正退出")), 15000);
-    browser.once("disconnected", () => { clearTimeout(timeout); done(); });
-    void control.send("Browser.close").catch((error) => { if (browser.isConnected()) { clearTimeout(timeout); reject(error); } });
-  });
+  try {
+    await new Promise<void>((done, reject) => {
+      const timeout = setTimeout(() => reject(new Error("App 未在 15 秒内真正退出")), 15000);
+      browser.once("disconnected", () => { clearTimeout(timeout); done(); });
+      void control.send("Browser.close").catch((error) => { if (browser.isConnected()) { clearTimeout(timeout); reject(error); } });
+    });
+  } catch (error) {
+    // 只断开验收客户端，错误仍向上传递；否则未完成的 CDP 请求会让失败脚本悬空。
+    await browser.close().catch(() => {}); throw error;
+  }
+}
+async function cleanFailedFixture(root: string) {
+  const binary = join(root, "installed/pi desk.app/Contents/MacOS/pi desk");
+  const { stdout } = await exec("ps", ["-axo", "pid=,pgid=,comm="]);
+  for (const line of stdout.split("\n")) {
+    const row = /^\s*(\d+)\s+(\d+)\s+(.+)$/.exec(line);
+    // 精确匹配本次随机临时目录中的副本；绝不匹配 /Applications 或其他用户进程。
+    if (!row || row[3] !== binary) continue;
+    const pid = Number(row[1]); const group = Number(row[2]);
+    try { process.kill(pid === group ? -group : pid, "SIGKILL"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
+  }
 }
 async function saved(page: Page) { return page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "{}").sessionPath as string | undefined, SESSION_KEY); }
 async function main() {
   await mkdir(artifacts, { recursive: true }); const root = await realpath(await mkdtemp(join(tmpdir(), "pi-gui-phase6-"))); const project = join(root, "project"); const other = join(root, "other");
-  await mkdir(project); await mkdir(other); await writeFile(join(project, "sample.md"), "# DESKTOP PREVIEW OK\n"); await writeFile(join(other, "other.txt"), "NATIVE FOLDER FIXTURE");
+  await mkdir(project); await mkdir(other); await writeFile(join(project, "sample.md"), "# DESKTOP PREVIEW OK\n\n\\(E=mc^2\\)\n\n\\[\n\\frac{1}{2}+\\frac{1}{2}=1\n\\]\n"); await writeFile(join(other, "other.txt"), "NATIVE FOLDER FIXTURE");
   const sessions = new Set<string>(); let cost = 0; let errors: string[] = []; let changedSession: string | undefined;
-  const verifyChanges = process.env.PI_DESK_VERIFY_CHANGES === "1";
+  const verifyChanges = process.env.PI_DESK_VERIFY_CHANGES === "1"; let completed = false;
   try {
     const devData = join(root, "dev-profile"); await mkdir(devData); await writeFile(join(devData, "window.json"), JSON.stringify({ workspace: project }));
     const dev = await _electron.launch({ args: [resolve("."), `--user-data-dir=${devData}`], env: { ...process.env, PATH: "/usr/bin:/bin" }, timeout: 30000 });
@@ -71,12 +87,12 @@ async function main() {
     const installed = join(root, "installed", "pi desk.app"); await mkdir(join(root, "installed")); await exec("ditto", [appPath, installed]);
     const packagedData = join(root, "packaged-profile"); await mkdir(packagedData); await writeFile(join(packagedData, "window.json"), JSON.stringify({ workspace: project })); const debugPort = await port();
     await exec("open", ["-n", installed, "--args", `--user-data-dir=${packagedData}`, `--remote-debugging-port=${debugPort}`], { env: { HOME: homedir(), PATH: "/usr/bin:/bin" } });
-    let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
+    let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined; let packagedPage: Page | undefined;
     try {
       await expect.poll(() => httpReady(`http://127.0.0.1:${debugPort}/json/version`), { timeout: 30000 }).toBe(true);
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`);
       await expect.poll(() => browser!.contexts()[0]?.pages().length ?? 0, { timeout: 30000 }).toBeGreaterThan(0);
-      const page = browser.contexts()[0].pages()[0]; page.on("pageerror", (error) => errors.push(error.message)); await idle(page);
+      const page = browser.contexts()[0].pages()[0]; packagedPage = page; page.on("pageerror", (error) => { errors.push(error.message); console.error(`桌面页面错误：${logText(error.message)}`); }); await idle(page);
       await page.getByLabel("搜索对话").fill(root.split("/").at(-1)!);
       await chooseModel(page, "cliproxy", "gpt-6-luna"); await idle(page); await setThinking(page, "low"); await idle(page);
       const replies: any[] = []; page.on("websocket", (socket) => socket.on("framereceived", ({ payload }) => { try { const event = JSON.parse(payload.toString()); if (event.record?.type === "message_end" && event.record.message?.role === "assistant") replies.push(event.record.message); } catch {} }));
@@ -88,11 +104,24 @@ async function main() {
       await expect(page.getByTestId("model-trigger")).toHaveAttribute("data-provider", "cliproxy");
       await expect(page.getByTestId("model-trigger")).toHaveAttribute("data-model", "gpt-6-luna");
       await expect(page.getByTestId("model-trigger")).toHaveAttribute("data-thinking", "low");
-      await page.getByLabel("消息", { exact: true }).fill("只回复 桌面验收通过，不要工具。"); await page.getByLabel("消息", { exact: true }).press("Enter");
+      await page.getByLabel("消息", { exact: true }).fill(String.raw`先回复“桌面验收通过”，不要工具，再原样输出以下 Markdown（不套代码围栏，保留公式分隔符）：
+行内一：\(E=mc^2\)，行内二：$x^2$。
+
+\[
+\frac{1}{2}+\frac{1}{2}=1
+\]
+
+$$
+a^2+b^2=c^2
+$$`); await page.getByLabel("消息", { exact: true }).press("Enter");
       await expect(page.locator("article[data-role=assistant]").last()).toContainText("桌面验收通过", { timeout: 180000 }); await expect(page.getByRole("button", { name: "停止", exact: true })).toHaveCount(0, { timeout: 30000 }); await idle(page);
+      await expect(page.locator("article[data-role=assistant]").last().locator(".katex")).toHaveCount(4);
       assert.ok(replies.length); for (const reply of replies) { assert.equal(reply.provider, "cliproxy"); assert.equal(reply.model, "gpt-6-luna"); assert.equal(reply.thinkingLevel, "low"); }
       cost = Number((await page.getByTestId("session-cost").innerText()).match(/\$([\d.]+)/)?.[1] || 0); const path = await saved(page); if (path) sessions.add(path);
       await page.getByRole("treeitem", { name: "预览 sample.md", exact: true }).click(); await expect(page.locator(".file-preview")).toContainText("DESKTOP PREVIEW OK");
+      await expect(page.locator(".file-preview .katex")).toHaveCount(2);
+      await page.getByLabel("搜索对话").fill(root.split("/").at(-1)!);
+      await page.screenshot({ path: join(artifacts, "rendering-desktop.png") });
       // 这里真正调用 shell.showItemInFolder（没有替身），Finder 选择的是合成文件。
       await page.getByRole("button", { name: "在 Finder 中显示", exact: true }).click();
       await page.getByLabel("搜索对话").fill(root.split("/").at(-1)!);
@@ -106,6 +135,16 @@ async function main() {
       }
       await page.screenshot({ path: join(artifacts, "phase-6-desktop.png") }); assert.deepEqual(errors, []);
       console.log(`Mac .app 验收通过：LaunchServices 实际打开、自带后台/网页/权限插件、luna/low 回复、Markdown 预览和真实 Finder 显示；聊天 $${cost.toFixed(6)}。`);
+    } catch (error) {
+      // 先保留原始失败，不能让 finally 的退出提醒/超时把真正问题覆盖掉。
+      console.error(`桌面主流程失败：${logText(error instanceof Error ? error.message : String(error))}`);
+      if (packagedPage && !packagedPage.isClosed()) {
+        await packagedPage.getByLabel("搜索对话").fill(root.split("/").at(-1)!).catch(() => {});
+        await packagedPage.screenshot({ path: join(artifacts, "rendering-desktop-failure.png") }).catch(() => {});
+        const stop = packagedPage.getByRole("button", { name: "停止", exact: true });
+        if (await stop.isVisible().catch(() => false)) { await stop.click().catch(() => {}); await expect(stop).toHaveCount(0, { timeout: 30000 }).catch(() => {}); }
+      }
+      throw error;
     } finally {
       if (browser) await quitApp(browser);
       await noBackend();
@@ -123,8 +162,8 @@ async function main() {
         console.log("第 10 阶段打包 App 验收通过：真实 edit 的 +1/-1、打包快照扩展、退出并通过 LaunchServices 重开 App 后恢复同一张历史卡片和 diff。");
       } finally { if (reopened) await quitApp(reopened); await noBackend(); }
     }
-    await writeFile(join(artifacts, "phase-6-mac-summary.json"), JSON.stringify({ verificationRun: process.env.PI_DESK_VERIFY_RUN, macApp: true, launchServices: true, chatCost: cost, model: "cliproxy/gpt-6-luna", thinkingLevel: "low", windowPersistence: true, nativeWiring: true, realFinderCall: true, changesCapturedAndAppReopened: !!changedSession, windows: "pending user verification" }, null, 2));
-    console.log("Mac 必要验收完成；Windows 仍须用户在真机确认，不算已通过。");
-  } finally { for (const path of sessions) { try { await stat(path); await exec("trash", [path]); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } } await exec("trash", [root]); }
+    await writeFile(join(artifacts, "phase-6-mac-summary.json"), JSON.stringify({ verificationRun: process.env.PI_DESK_VERIFY_RUN, macApp: true, launchServices: true, chatCost: cost, latexChatAndPreview: true, model: "cliproxy/gpt-6-luna", thinkingLevel: "low", windowPersistence: true, nativeWiring: true, realFinderCall: true, changesCapturedAndAppReopened: !!changedSession, windows: "pending user verification" }, null, 2));
+    completed = true; console.log("Mac 必要验收完成；Windows 仍须用户在真机确认，不算已通过。");
+  } finally { if (!completed) await cleanFailedFixture(root); for (const path of sessions) { try { await stat(path); await exec("trash", [path]); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } } await exec("trash", [root]); }
 }
 await main().catch((error: Error) => { console.error(`桌面验收失败：${logText(error.message)}`); process.exitCode = 1; });

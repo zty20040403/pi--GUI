@@ -13,10 +13,12 @@ export const initialState: ChatState = {
   cwd: "", connection: "connecting", messages: [], tools: {}, session: {}, stats: {}, models: [], levels: [], commands: [],
   busy: false, compacting: false, externalChanged: false, statuses: {}, steering: [], followUp: [], todoSeq: 0,
 };
+export type EventAction = { type: "event"; value: WireRecord; now: number; seq?: number };
 export type Action =
+  | { type: "events"; actions: EventAction[] }
   | { type: "connection"; value: Connection }
   | { type: "opened"; value: Opened }
-  | { type: "event"; value: WireRecord; now: number; seq?: number }
+  | EventAction
   | { type: "session"; value: SessionState }
   | { type: "stats"; value: Stats }
   | { type: "levels"; value: string[] }
@@ -31,7 +33,9 @@ function updateTools(tools: Record<string, Tool>, message: Message): Record<stri
   let next = tools;
   for (const block of blocksOf(message)) {
     if (block.type !== "toolCall" || !block.id) continue;
-    next = { ...next, [block.id]: { ...next[block.id], id: block.id, name: block.name ?? "tool", args: block.arguments ?? {}, status: next[block.id]?.status ?? "pending" } };
+    const old = next[block.id]; const name = block.name ?? "tool"; const args = block.arguments ?? old?.args ?? {};
+    if (old && old.name === name && old.args === args) continue;
+    next = { ...next, [block.id]: { ...old, id: block.id, name, args, status: old?.status ?? "pending" } };
   }
   if (message.role === "toolResult" && message.toolCallId) {
     const old = next[message.toolCallId];
@@ -54,6 +58,7 @@ function putMessage(state: ChatState, message: Message, complete: boolean, now: 
 
 export function reducer(state: ChatState, action: Action): ChatState {
   switch (action.type) {
+    case "events": return action.actions.reduce(reducer, state);
     case "connection": return { ...state, connection: action.value };
     case "session": return { ...state, session: { ...state.session, ...action.value }, busy: action.value.isStreaming ?? state.busy, compacting: action.value.isCompacting ?? state.compacting };
     case "stats": return { ...state, stats: action.value };

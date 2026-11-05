@@ -1,11 +1,11 @@
-import { lazy, Suspense } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { memo, useMemo } from "react";
 import { useChat } from "../../api/ChatProvider";
-import { markdownParts, markdownUrl, type MarkdownProps } from "../render/MarkdownParts";
+import { MarkdownContext, type MarkdownProps } from "../render/MarkdownParts";
+import RichMarkdown from "../render/RichMarkdown";
 export { CopyButton } from "../render/CopyButton";
-const RichMarkdown = lazy(() => import("../render/RichMarkdown"));
-export function Markdown(props: MarkdownProps) {
-  const { state } = useChat(); const config = { ...props, cwd: props.cwd ?? state.cwd };
-  return <div className="markdown"><Suspense fallback={<ReactMarkdown skipHtml urlTransform={markdownUrl} remarkPlugins={[remarkGfm]} components={markdownParts(config, false)}>{props.text}</ReactMarkdown>}><RichMarkdown {...config} /></Suspense></div>;
-}
+
+export const Markdown = memo(function Markdown({ text, cwd, document, onFile }: MarkdownProps) {
+  const { state } = useChat(); const project = cwd ?? state.cwd;
+  const context = useMemo(() => ({ cwd: project, document, onFile }), [project, document, onFile]);
+  return <MarkdownContext.Provider value={context}><div className="markdown"><RichMarkdown text={text} /></div></MarkdownContext.Provider>;
+});

@@ -1,9 +1,8 @@
 import { EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
-import { constants, watch, type FSWatcher } from "node:fs";
+import { constants, unwatchFile, watch, watchFile, type FSWatcher, type Stats } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import { HttpError } from "./http.js";
-import { dirname, basename } from "node:path";
 import type { PiProcess, RpcRecord } from "./pi-process.js";
 
 export const EXTERNAL_CHANGE = "这个对话在别处（比如终端）有新消息。重新载入后才能继续发送。";
@@ -11,7 +10,7 @@ const LIMIT = 50 * 1024 * 1024;
 type Snapshot = { stamp: string; header: string; entries: string[]; size: number };
 type Tracked = { pi: PiProcess; path: string; snapshot?: Snapshot; dirty: boolean; unstable?: boolean; checking?: Promise<boolean> };
 export type SyncState = { sessionPath: string; externalChanged: boolean };
-export type SyncOptions = { debounceMs?: number; pollMs?: number; watch?: typeof watch };
+export type SyncOptions = { debounceMs?: number; pollMs?: number; projectPollMs?: number; watch?: typeof watch };
 
 // 比较完整条目内容，而不是“最近几秒写过”这种时间猜测；并发的终端写入不能冒充 App 写入。
 function canonical(value: unknown): string {
@@ -46,7 +45,7 @@ async function snapshot(path: string, previous?: Snapshot): Promise<Snapshot | "
 
 export class SessionSync extends EventEmitter {
   private watcher?: FSWatcher;
-  private readonly projectWatchers = new Map<string, { watcher: FSWatcher; names: Set<string> }>();
+  private readonly projectWatchers = new Map<string, (current: Stats, previous: Stats) => void>();
   private timer?: NodeJS.Timeout;
   private poll?: NodeJS.Timeout;
   private closed = false;
@@ -70,16 +69,21 @@ export class SessionSync extends EventEmitter {
   }
   watchProjects(paths: string[]) {
     if (this.closed) return;
-    const parents = new Map<string, Set<string>>();
-    for (const path of paths) { const parent = dirname(path); const names = parents.get(parent) ?? new Set<string>(); names.add(basename(path)); parents.set(parent, names); }
-    for (const [parent, entry] of this.projectWatchers) if (!parents.has(parent)) { entry.watcher.close(); this.projectWatchers.delete(parent); }
-    for (const [parent, names] of parents) {
-      const existing = this.projectWatchers.get(parent); if (existing) { existing.names = names; continue; }
-      try {
-        const watcher = watch(parent, (_event, filename) => { if (!filename || this.projectWatchers.get(parent)?.names.has(String(filename)) || String(filename) === basename(parent)) this.schedule(); });
-        this.projectWatchers.set(parent, { watcher, names }); watcher.unref();
-        watcher.on("error", () => { watcher.close(); this.projectWatchers.delete(parent); this.schedule(); });
-      } catch { /* 父文件夹也不存在时保留 15 秒轮询。 */ }
+    const wanted = new Set(paths);
+    for (const [path, listener] of this.projectWatchers) if (!wanted.has(path)) { unwatchFile(path, listener); this.projectWatchers.delete(path); }
+    for (const path of wanted) {
+      if (this.projectWatchers.has(path)) continue;
+      // 历史项目可能位于 macOS 受保护位置。不能为了检测目录失效而同步打开它的父目录：
+      // uv_fs_event_start/open 会阻塞整个后台，连 HTTP 健康检查和退出都无法响应。
+      // 只异步轮询项目本身的 stat；不枚举父目录，不读取任何项目文件。
+      let wasDirectory: boolean | undefined;
+      const listener = (current: Stats, previous: Stats) => {
+        // watchFile 的文件消失/恢复回调可能给出同一个 previous；自己保留上次存在性。
+        const before = wasDirectory ?? previous.isDirectory(); wasDirectory = current.isDirectory();
+        if (wasDirectory !== before) this.schedule();
+      };
+      try { watchFile(path, { persistent: false, interval: this.options.projectPollMs ?? 2000 }, listener); this.projectWatchers.set(path, listener); }
+      catch { /* 无法轮询的路径继续由对话目录变化及 15 秒回退刷新。 */ }
     }
   }
   schedule() {
@@ -156,7 +160,7 @@ export class SessionSync extends EventEmitter {
     if (this.tracked.get(pi)?.unstable) throw new HttpError(409, "对话文件正在写入，请稍候再发送；不会自动重发消息。");
   }
   close() {
-    for (const { watcher } of this.projectWatchers.values()) watcher.close(); this.projectWatchers.clear();
+    for (const [path, listener] of this.projectWatchers) unwatchFile(path, listener); this.projectWatchers.clear();
     this.closed = true; clearTimeout(this.timer); clearInterval(this.poll); this.watcher?.close(); this.tracked.clear(); this.authored.clear();
   }
 }

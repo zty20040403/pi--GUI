@@ -4,6 +4,8 @@ Kenneth 的 pi 图形客户端，可以运行本机已有的 pi，也附带固�
 
 **当前进度：第一版六个阶段及第二版第 7–11 阶段已完成。** 新增终端对话实时同步、外部修改保护、失效项目重新指定、中文错误详情、插件提醒隐藏/恢复、自绘模型/权限菜单和横向推理滑杆、插件管理页面，以及每轮改动卡片和 diff 审阅。第 11 阶段提供内置 pi、独立 Node 后台、动态端口、中文原生菜单及有临时签名的 macOS dmg / zip；自动验收与 Kenneth 的系统操作手动验收均已通过。 安装方法见下方 [Mac 应用](#mac-应用)，验收进度见 [`docs/phase-11-verification.md`](docs/phase-11-verification.md)。第二版后续工作见 [`PLAN-v2.md`](PLAN-v2.md)。Windows SSH 远程使用曾由 Kenneth 在真机确认，Windows 本地版尚未实现。
 
+**0.1.1 修复版**：补齐 `\(...\)` / `\[...\]` 公式，保留已有代码、图片和图表节点，按帧合并流式更新，避免回复时反复清空、重建内容。也修正了历史项目目录监听可能卡住 Mac 后台的问题。详情见 [公式与流式渲染验收](docs/rendering-verification.md)。
+
 ## 浏览器开发版怎么打开试
 
 打开 Mac 的“终端”，运行：
@@ -166,7 +168,7 @@ npm start
 ### 安装（Apple 芯片 Mac）
 
 1. 先用 **⌘Q** 退出旧版 pi desk。
-2. 打开 `release/pi desk-0.1.0-arm64.dmg`，把 **π 图标拖到右边“应用程序”**。也提供同版本 `.zip`，解压后把 App 移到应用程序即可。
+2. 打开 `release/pi desk-0.1.1-arm64.dmg`，把 **π 图标拖到右边“应用程序”**。也提供同版本 `.zip`，解压后把 App 移到应用程序即可。
 3. 从应用程序打开 pi desk。首次被系统拦住时，**右键 → 打开**；较新的 macOS 可能还需在“系统设置 → 隐私与安全性”确认“仍要打开”。只对自己构建或信任的安装包这样操作，不关闭系统安全检查。
 4. 已有 pi 配置时直接使用；模型凭据不在安装包里，也不会自动生成。若系统询问访问项目文件夹权限，按你的意愿允许。
 
@@ -190,7 +192,7 @@ npm start
 cd ~/Desktop/"pi harness"
 npm ci
 npm run desktop:dist
-open "release/pi desk-0.1.0-arm64.dmg"
+open "release/pi desk-0.1.1-arm64.dmg"
 ```
 
 `npm run desktop:build` 只生成本地测试 App，位于 **`~/Library/Caches/pi-desk/build/pi desk.app`**；`desktop:dist` 额外生成 `release/` 下的 dmg / zip。签名和封装在系统临时目录完成，避免桌面同步服务反复写入 Finder 元数据而破坏签名；不再把裸 App 放到桌面仓库的 `release/mac-arm64`。
@@ -234,7 +236,8 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:4317:127.0.0.1:4317 kenneth@alex
 
 ```bash
 npm run typecheck       # 后台、前端、脚本和 Vite 配置的 TypeScript
-npm test                # 不调用模型：75 组自动测试（含真实 pi 权限/目录映射、插件与快照边界）
+npm test                # 不调用模型：83 组自动测试，另重跑 4 组开发模式公式测试
+npm run verify:rendering # 真实 Chrome 合成流式：公式/节点稳定/高频消息/图表/滚动/超长代码
 npm run build           # 构建真实聊天网页
 npm run verify:phase1   # 后台完整验收，包含一次真实模型请求
 npm run verify:phase2   # 真实 Chrome 聊天页 + 终端 pi -r + 生产页面验收
@@ -346,11 +349,12 @@ WebSocket：`/ws?token=<启动口令>`。检查 Host 和 Origin；开发模式�
 - **页面连接不上**：确认后台终端还开着。如果重启过，用本次打印的新网址；不要公开保存真实口令。
 - **找不到 pi**：桌面设置里可选内置引擎；要用系统 pi，先在终端运行 `pi --version`。源码开发还可以用 `PI_BIN=/pi/可执行文件的绝对路径 npm run dev` 指定路径。
 - **找不到模型 / 请求报错**：先在终端 pi 里确认 `cliproxy/gpt-6-luna` 能用。本项目不替你改模型配置；新对话按 pi 的默认配置，新建后请重新确认模型和推理档位。
+- **数学公式**：AI 回复和 Markdown 文件预览支持 `$...$`、`$$...$$`、`\(...\)`、`\[...\]`。代码围栏、行内代码和链接地址不当成公式。使用 KaTeX，不是完整 LaTeX 文档编译器；不支持的命令会保留错误/源码提示。反斜杠公式只有闭合后才排版，正常增行或公式闭合仍可能改变内容高度。
 - **旧对话的思考耗时**：pi 没保存耗时就只显示“思考过程”，不会编造 N 秒；当前流式回复会计时。
 - **旧项目目录已不存在**：会话仍在列表中；点进去可重新指定文件夹，也可确认后移到废纸篓。App 映射不改变终端的原目录。
 - **还没做**：Windows 本地版、系统级通知及改动撤销。当前只有标题提醒，没有系统通知；没有自动更新。Mac 安装包有临时签名，但没有 Apple 公证。
 - **未验证**：Safari、Intel Mac 及装好 LibreOffice 后的隔离转换。Windows SSH/浏览器由 Kenneth 真机反馈通过，非代理自动操作。Mac Electron 已实际启动/聊天，Finder 显示已实际调用；系统默认软件打开仍只检查参数接线，没自动启动用户的其他 GUI 应用。
-- **依赖审计**：2026-11-02 完整 `npm audit` 为 **22 moderate、0 high、0 critical**。按 Kenneth 明确批准升级 Electron 到 **44.10.1**（安全补丁未满两周的例外）、Vite 到 **7.3.7**，pi 固定 **1.4.0**；已重跑真实 RPC/聊天、Chrome 文件预览及桌面验收。剩余中危涉及 SDK、ExcelJS 和打包依赖链，并非零风险，没有用 `npm audit fix --force` 自动升级或降级。主窗口为兼容隔离 HTML 开关保留 CSP unsafe-inline，也不能宣称完全防 XSS。只在本机可信项目使用，不暴露到公网。
+- **依赖审计**：2026-11-05 完整 `npm audit` 为 **9 moderate、0 high、0 critical**。按 Kenneth 明确批准升级 Electron 到 **44.10.1**（安全补丁未满两周的例外）、Vite 到 **7.3.7**，pi 固定 **1.4.0**；已重跑真实 RPC/聊天、Chrome 文件预览及桌面验收。剩余中危涉及 SDK、ExcelJS 和打包依赖链，并非零风险，没有用 `npm audit fix --force` 自动升级或降级。主窗口为兼容隔离 HTML 开关保留 CSP unsafe-inline，也不能宣称完全防 XSS。只在本机可信项目使用，不暴露到公网。
 
 ## 致谢
 

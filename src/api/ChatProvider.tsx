@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useReducer, useRef, 
 import { RpcClient } from "./client";
 import { errorInfo, type ErrorValue } from "../../shared/errors";
 import type { AttachmentRef } from "./attachments";
-import { initialState, reducer, type ChatState } from "./state";
+import { initialState, reducer, type ChatState, type EventAction } from "./state";
+import { frameBatch } from "./frame-batch";
 import { http, savedTarget, SESSION_KEY, savePreference } from "./storage";
 import { readRecents, RECENTS_KEY, rememberProject } from "./projects";
 import type { Activity, Project, RecentProject, SessionState, SessionSummary, Stats, Target, WireRecord } from "./types";
@@ -46,6 +47,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
     let active = true; let cwd = ""; let sessionPath: string | undefined; let hasMessages = false; let fallbackTarget: Target | undefined;
     let generation = 0; let requestId = 0; let activityVersion = 0;
     let listTimer: ReturnType<typeof setTimeout> | undefined;
+    const updates = frameBatch<EventAction>((actions) => { if (active) dispatch({ type: "events", actions }); });
     const known: Record<string, string | undefined> = {};
     const wsUrl = new URL("/ws", window.location.href); wsUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const rpc = new RpcClient(token, wsUrl.toString()); client.current = rpc;
@@ -88,6 +90,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
     };
     const unsubscribe = rpc.subscribe((event) => {
       if (!active) return;
+      if (event.kind !== "event") updates.flush();
       if (event.kind === "connection") { dispatch({ type: "connection", value: event.value }); setSwitching(event.value === "opening"); }
       if (event.kind === "error") report(event.value);
       if (event.kind === "projects_changed") scheduleList();
@@ -125,7 +128,9 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
         }
         if (["agent_settled", "session_info_changed", "desk_process_exit"].includes(record.type)) scheduleList();
         if (event.cwd === cwd) {
-          dispatch({ type: "event", value: record, now: Date.now(), seq: event.seq });
+          const action: EventAction = { type: "event", value: record, now: Date.now(), seq: event.seq };
+          if (record.type === "message_update" || record.type === "tool_execution_update") updates.push(action);
+          else { updates.flush(); dispatch(action); } // 结束、错误、停止等立即生效，且不能被旧 delta 覆盖。
           if (record.type === "message_end" && record.message?.role === "user") { hasMessages = true; persist(); scheduleList(); }
           if (record.type === "desk_process_exit") dispatch({ type: "session", value: { isStreaming: false, isCompacting: false } });
           if (["agent_settled", "thinking_level_changed", "session_info_changed"].includes(record.type)) void refresh.current().catch(report);
@@ -145,7 +150,7 @@ export function ChatProvider({ token, children }: { token: string; children: Rea
       cwd = target.cwd;
       rpc.connect(target); void refreshProjects.current();
     })().catch(report);
-    return () => { active = false; if (listTimer) clearTimeout(listTimer); unsubscribe(); rpc.dispose(); };
+    return () => { active = false; updates.clear(); if (listTimer) clearTimeout(listTimer); unsubscribe(); rpc.dispose(); };
   }, [token]);
 
   async function rpc(cmd: WireRecord) {

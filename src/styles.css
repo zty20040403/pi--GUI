@@ -335,6 +335,7 @@ button:active:not(:disabled) { background: var(--active); }
 .code-toolbar .quiet-button { font: 11px var(--font); padding: 2px 8px; }
 .code-block pre { margin: 0; padding: 12px 14px; white-space: pre; overflow: auto; }
 .syntax { max-width: 100%; overflow: auto; }
+@media (prefers-color-scheme: dark) { .syntax-token { color: var(--shiki-dark) !important; } }
 .syntax pre { margin: 0; padding: 12px 14px; white-space: pre; overflow-wrap: normal; overflow: auto; background: transparent !important; }
 .line-numbers code { counter-reset: code-line; }
 .line-numbers .line { display: inline-block; min-width: 100%; }
